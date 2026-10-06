@@ -35,12 +35,17 @@ PC를 사용하는 동안 일정 간격으로 눈 운동을 알려주는 Windows
 ## 환경
 - 프로젝트 폴더의 `.venv`를 사용한다. (활성화: `.venv\Scripts\activate`)
 - `.venv`는 Git에 올리지 않는다. `.gitignore`에 포함되어 있는지 확인한다.
-- 의존성은 `requirements.txt`(또는 pyproject)로 관리한다.
+- Python 3.12를 사용한다.
+- 의존성은 `requirements.txt`에만 둔다. `pyproject.toml`에는 패키지 정보와 pytest·빌드 설정만 둔다.
 
-## 명령어 (구현 후 실제 값으로 갱신)
-- 실행: `.venv\Scripts\python -m eyeexercise` (예정)
+## 명령어
+- 첫 설정:
+  - `py -3.12 -m venv .venv`
+  - `.venv\Scripts\python -m pip install -r requirements-dev.txt`
+  - `.venv\Scripts\python -m pip install -e .`
+- 실행: `.venv\Scripts\python -m eyeexercise`
 - 테스트: `.venv\Scripts\python -m pytest`
-- exe 빌드: `.venv\Scripts\pyinstaller ...` (예정)
+- exe 빌드: 8단계에서 확정
 
 ## 작업 방식
 - 기능 단위로 작게 나눠 진행한다. 한 번에 여러 기능을 크게 구현하지 않는다.
