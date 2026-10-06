@@ -1,0 +1,87 @@
+from eyeexercise.core.settings import Settings, settings_from_dict, settings_to_dict
+
+
+def test_기본값():
+    s = Settings()
+    assert s.interval_minutes == 20
+    assert s.snooze_minutes == 5
+    assert s.idle_pause_minutes == 1
+    assert s.idle_reset_minutes == 5
+    assert s.exercises.blink.enabled is True
+    assert s.exercises.blink.duration_seconds == 30
+    assert s.exercises.dot_follow.duration_seconds == 60
+    assert s.exercises.dot_follow.speed == "normal"
+    assert s.show_main_window_on_start is False
+    assert s.camera.enabled is False  # 카메라는 opt-in
+
+
+def test_빈_dict나_dict가_아닌_값은_기본값():
+    assert settings_from_dict({}) == Settings()
+    assert settings_from_dict(None) == Settings()
+    assert settings_from_dict([1, 2]) == Settings()
+
+
+def test_dict_변환_왕복():
+    original = Settings(interval_minutes=45, snooze_minutes=10)
+    assert settings_from_dict(settings_to_dict(original)) == original
+
+
+def test_저장_dict에_version이_있다():
+    assert settings_to_dict(Settings())["version"] == 1
+
+
+def test_모르는_키는_무시한다():
+    s = settings_from_dict({"interval_minutes": 30, "unknown": 1, "exercises": {"foo": {}}})
+    assert s.interval_minutes == 30
+
+
+def test_누락된_키는_기본값으로_채운다():
+    s = settings_from_dict({"exercises": {"blink": {"enabled": False}}})
+    assert s.exercises.blink.enabled is False
+    assert s.exercises.blink.duration_seconds == 30
+    assert s.interval_minutes == 20
+
+
+def test_범위를_벗어난_값은_경계값으로_보정한다():
+    assert settings_from_dict({"interval_minutes": 0}).interval_minutes == 1
+    assert settings_from_dict({"interval_minutes": 9999}).interval_minutes == 120
+    assert settings_from_dict({"snooze_minutes": -3}).snooze_minutes == 1
+    s = settings_from_dict({"exercises": {"blink": {"duration_seconds": 1}}})
+    assert s.exercises.blink.duration_seconds == 5
+
+
+def test_타입이_잘못된_값은_기본값():
+    s = settings_from_dict(
+        {
+            "interval_minutes": "20",
+            "snooze_minutes": 5.5,
+            "idle_reset_minutes": True,  # bool은 정수로 취급하지 않는다
+            "show_main_window_on_start": "yes",
+            "camera": {"enabled": 1},
+            "exercises": {"dot_follow": {"speed": "turbo"}},
+        }
+    )
+    assert s.interval_minutes == 20
+    assert s.snooze_minutes == 5
+    assert s.idle_reset_minutes == 5
+    assert s.show_main_window_on_start is False
+    assert s.camera.enabled is False
+    assert s.exercises.dot_follow.speed == "normal"
+
+
+def test_idle_pause는_idle_reset보다_작게_보정된다():
+    s = settings_from_dict({"idle_pause_minutes": 10, "idle_reset_minutes": 5})
+    assert (s.idle_pause_minutes, s.idle_reset_minutes) == (4, 5)
+
+    same = settings_from_dict({"idle_pause_minutes": 5, "idle_reset_minutes": 5})
+    assert (same.idle_pause_minutes, same.idle_reset_minutes) == (4, 5)
+
+
+def test_idle_reset이_최솟값이어도_pause는_1_이상():
+    s = settings_from_dict({"idle_pause_minutes": 30, "idle_reset_minutes": 2})
+    assert (s.idle_pause_minutes, s.idle_reset_minutes) == (1, 2)
+
+
+def test_유효한_idle_설정은_그대로_유지된다():
+    s = settings_from_dict({"idle_pause_minutes": 2, "idle_reset_minutes": 10})
+    assert (s.idle_pause_minutes, s.idle_reset_minutes) == (2, 10)
