@@ -1,0 +1,9 @@
+[project]
+name = "eyeexercise"
+version = "0.1.0"
+description = "일정 간격으로 눈 운동을 알려주는 Windows 트레이 상주 앱"
+requires-python = ">=3.12"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
