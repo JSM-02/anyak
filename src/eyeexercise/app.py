@@ -10,27 +10,29 @@ from PySide6.QtWidgets import QApplication, QSystemTrayIcon
 from eyeexercise.core.clock import SystemClock
 from eyeexercise.core.scheduler import ReminderScheduler, State
 from eyeexercise.core.settings import Settings
+from eyeexercise.platform.win_idle import WinIdleSource
+from eyeexercise.platform.win_window import allow_any_process_to_set_foreground
 from eyeexercise.storage import json_store, paths
 from eyeexercise.ui.controller import Controller
 from eyeexercise.ui.icons import app_icon
+from eyeexercise.ui.main_window import MainWindow
 from eyeexercise.ui.reminder_popup import ReminderPopup
+from eyeexercise.ui.single_instance import SingleInstance
 from eyeexercise.ui.tray import TrayIcon
 
 log = logging.getLogger(__name__)
 
 
-class _NoIdle:
-    """임시 유휴 소스: 항상 방금 입력한 것으로 본다. 3b단계에서 Win32 구현으로 교체한다."""
-
-    def idle_seconds(self) -> float:
-        return 0.0
-
-
 class TrayApp:
     def __init__(self, app: QApplication, settings: Settings) -> None:
-        scheduler = ReminderScheduler(settings, SystemClock(), _NoIdle())
+        self._app = app
+        self._settings = settings
+        self._hide_hint_shown = False
+
+        scheduler = ReminderScheduler(settings, SystemClock(), WinIdleSource())
         self.controller = Controller(scheduler)
         self.popup = ReminderPopup(settings.snooze_minutes)
+        self.main_window = MainWindow()
         self.tray = TrayIcon(self.controller, app_icon())
 
         self.controller.reminder_due.connect(self.popup.show_at_corner)
@@ -41,12 +43,25 @@ class TrayApp:
         self.popup.snooze_clicked.connect(self.controller.snooze)
         self.popup.skip_clicked.connect(self.controller.skip)
 
+        self.main_window.hidden_to_tray.connect(self._on_hidden_to_tray)
+        self.tray.open_requested.connect(self.show_main_window)
         self.tray.quit_requested.connect(self.quit)
-        self._app = app
 
     def start(self) -> None:
         self.tray.show()
         self.controller.start()
+        if self._settings.show_main_window_on_start:
+            self.show_main_window()
+
+    def show_main_window(self) -> None:
+        self.main_window.show_and_raise()
+
+    def quit(self) -> None:
+        self.main_window.prepare_to_quit()
+        self.controller.stop()
+        self.popup.hide()
+        self.tray.hide()
+        self._app.quit()
 
     def _on_state_changed(self, state: State) -> None:
         # 버튼이든 트레이 메뉴든, 알림 상태를 벗어나면 팝업을 닫는다.
@@ -58,11 +73,11 @@ class TrayApp:
         self.tray.show_message("눈 운동 화면은 아직 준비 중이에요. 타이머를 다시 시작합니다.")
         self.controller.finish_exercise()
 
-    def quit(self) -> None:
-        self.controller.stop()
-        self.popup.hide()
-        self.tray.hide()
-        self._app.quit()
+    def _on_hidden_to_tray(self) -> None:
+        # 창이 사라져서 당황하지 않도록, 실행 중 처음 한 번만 알려준다.
+        if not self._hide_hint_shown:
+            self._hide_hint_shown = True
+            self.tray.show_message("창을 닫아도 트레이에서 계속 실행돼요. 종료는 트레이 메뉴에서 할 수 있어요.")
 
 
 def _load_settings() -> Settings:
@@ -94,11 +109,23 @@ def run() -> int:
     app.setQuitOnLastWindowClosed(False)  # 트레이 상주 앱: 창이 없어도 종료하지 않는다
     app.setWindowIcon(app_icon())
 
+    instance = SingleInstance()
+    if not instance.acquire():
+        allow_any_process_to_set_foreground()
+        if instance.notify_primary():
+            log.info("이미 실행 중입니다. 실행 중인 창을 앞으로 가져옵니다.")
+            return 0
+        log.error("이미 실행 중인 인스턴스에 연결하지 못했습니다.")
+        return 1
+
     if not QSystemTrayIcon.isSystemTrayAvailable():
         log.error("시스템 트레이를 사용할 수 없어 종료합니다.")
         return 1
 
     tray_app = TrayApp(app, _load_settings())
+    instance.activated.connect(tray_app.show_main_window)
     tray_app.start()
     sigint_wakeup = _install_sigint_handler(tray_app)  # noqa: F841 (참조 유지용)
-    return app.exec()
+    code = app.exec()
+    instance.release()
+    return code

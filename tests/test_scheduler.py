@@ -238,6 +238,27 @@ def test_절전으로_길게_끊기면_리셋한다(env):
     assert env.sched.elapsed_seconds == 0
 
 
+def test_절전_복귀_후_남은_시간은_복귀_순간부터_다시_흐른다():
+    # 알림 5분 설정, 100초 사용 -> 5분 절전 -> 키 입력으로 복귀
+    env = Env(dataclasses.replace(Settings(), interval_minutes=5))
+    env.active(100)
+    assert env.sched.remaining_seconds == 200
+
+    env.clock.advance(300)  # tick 없이 5분이 흐름
+    env.idle.value = 0  # 키를 눌러 깨움
+    env.events += env.sched.tick()
+    assert env.sched.remaining_seconds == 300  # 복귀 직후: 정확히 5분으로 리셋
+
+    # 복귀한 첫 tick은 마지막 입력 이후 시간(0초)만 세므로 1초 뒤에도 5분이다
+    env.active(1)
+    assert env.sched.remaining_seconds == 300
+    env.active(1)
+    assert env.sched.remaining_seconds == 299
+    env.active(1)
+    assert env.sched.remaining_seconds == 298  # 툴팁으로는 "4분 58초"
+    assert env.due_count() == 0
+
+
 def test_짧게_끊긴_구간은_사용_시간으로_세지_않는다(env):
     env.active(100)
     env.clock.advance(30)  # 10초 초과, 유휴 기준(60초) 미만
