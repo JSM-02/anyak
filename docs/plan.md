@@ -135,10 +135,12 @@ src 레이아웃을 쓰는 이유: 테스트가 패키지 기준으로 import되
 
 각 단계는 작게 진행한다. 끝날 때마다 바꾼 내용과 이유를 설명하고 커밋을 제안하며, 사용자가 승인한 뒤에만 커밋한다.
 
+진행 표시: ✅ = 완료. 단계가 끝나면 커밋 전에 이 표를 먼저 갱신해서 같은 커밋에 포함한다.
+
 | 단계 | 내용 | 테스트 |
 |---|---|---|
-| 0. 골격 | Python 3.12로 `.venv` 재생성, `.gitignore`, pyproject.toml(패키지 정보·pytest 설정), requirements.txt, requirements-dev.txt, src와 tests 폴더, 빈 `__main__` | pytest 스모크 테스트 1개, `python -m eyeexercise` 실행, `python --version`이 3.12인지 확인 |
-| 1. 설정과 저장소 | `core/settings`, `storage/paths`, `storage/json_store` | 기본값, 범위 보정, pause < reset 보정, 저장 후 다시 읽기, 손상 파일 백업과 복구, 모르는 키·누락 키 처리 (경로는 tmp_path) |
+| ✅ 0. 골격 | Python 3.12로 `.venv` 재생성, `.gitignore`, pyproject.toml(패키지 정보·pytest 설정), requirements.txt, requirements-dev.txt, src와 tests 폴더, 빈 `__main__` | pytest 스모크 테스트 1개, `python -m eyeexercise` 실행, `python --version`이 3.12인지 확인 |
+| ✅ 1. 설정과 저장소 | `core/settings`, `storage/paths`, `storage/json_store` | 기본값, 범위 보정, pause < reset 보정, 저장 후 다시 읽기, 손상 파일 백업과 복구, 모르는 키·누락 키 처리 (경로는 tmp_path) |
 | 2. 스케줄러 | `core/clock`, `core/idle`, `core/scheduler` | FakeClock으로 20분 후 DUE, 미루기 후 다시 DUE, 건너뛰기 리셋, 일시정지·재개, 유휴 59초는 정상 누적, 1분 유휴는 누적 정지 후 복귀 시 이어서 계산, 4분 59초는 리셋하지 않음, 5분은 리셋, SNOOZED 중 유휴 규칙, DUE 중에는 유휴여도 유지, 절전으로 tick 간격이 큰 경우, 설정 변경 반영 |
 | 3a. 트레이와 팝업 | `ui/controller`, `ui/tray`, `ui/reminder_popup`, 최소 `app.py` (유휴는 FakeIdle 대신 항상 0을 돌려주는 임시 구현) | 수동 체크리스트: interval 1분으로 팝업 표시, 미루기·건너뛰기·시작 버튼 동작, 트레이 메뉴(일시정지·종료) |
 | 3b. 유휴 감지·단일 인스턴스·메인 창 | `platform/win_idle`, 단일 인스턴스(QLockFile), `ui/main_window`(빈 화면, 닫으면 트레이로 숨김) | `win_idle`이 0 이상의 값을 반환하는지 (Windows 전용 테스트). 수동 체크리스트: 입력 없이 1분 지나면 누적 정지, 5분이면 리셋, 두 번째 실행이 첫 인스턴스를 앞으로 가져옴, 창 닫아도 종료되지 않음 |
