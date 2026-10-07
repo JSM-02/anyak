@@ -34,3 +34,34 @@ def test_종료_준비_후에는_닫기를_막지_않는다(qapp):
 
     assert window.close() is True
     assert hidden == []  # 종료 중에는 "트레이로 숨었다"는 신호를 내지 않는다
+
+
+def test_넉넉한_화면에서는_기본_크기를_쓴다():
+    from PySide6.QtCore import QRect
+
+    from eyeexercise.ui.main_window import fit_to_screen
+
+    assert fit_to_screen(QRect(0, 0, 1920, 1040)) == ((1000, 700), (860, 560))
+
+
+def test_배율이_높아_화면이_작으면_창이_화면_안에_들어온다():
+    from PySide6.QtCore import QRect
+
+    from eyeexercise.ui.main_window import fit_to_screen
+
+    # 1080p 150%: 논리 크기 1280×720에서 작업 표시줄을 뺀 약 1280×672
+    assert fit_to_screen(QRect(0, 0, 1280, 672)) == ((1000, 632), (860, 560))
+    # 768p 125%: 논리 1092×614 → 작업 표시줄을 뺀 약 574. 최소 크기도 함께 줄어든다
+    size, minimum = fit_to_screen(QRect(0, 0, 1092, 574))
+    assert size == (1000, 534) and minimum == (860, 534)
+    # 아주 작아도 화면을 넘지 않는다
+    size, minimum = fit_to_screen(QRect(0, 0, 800, 600))
+    assert size == (760, 560) and minimum == (760, 560)
+
+
+def test_메인_창은_현재_화면에_맞는_크기로_만들어진다(qapp):
+    from PySide6.QtGui import QGuiApplication
+
+    area = QGuiApplication.primaryScreen().availableGeometry()
+    window = MainWindow()
+    assert window.width() <= area.width() and window.height() <= area.height()

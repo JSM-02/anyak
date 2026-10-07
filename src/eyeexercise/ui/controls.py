@@ -22,25 +22,25 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-BLUE = "#1a73e8"
+from eyeexercise.ui import theme
 
-# 슬라이더와 분할 버튼의 모양. 이 컨트롤을 쓰는 화면의 스타일시트에 이어 붙인다.
-CONTROLS_STYLE = f"""
-QSlider::groove:horizontal {{ height: 6px; background: #d5d8dc; border-radius: 3px; }}
-QSlider::sub-page:horizontal {{ background: {BLUE}; border-radius: 3px; }}
-QSlider::handle:horizontal {{
+# 슬라이더와 분할 버튼의 모양. 이 컨트롤을 쓰는 화면의 스타일시트에 이어 붙인다 (`$이름`은 theme가 채운다).
+CONTROLS_STYLE = """
+QSlider::groove:horizontal { height: 6px; background: $track; border-radius: 3px; }
+QSlider::sub-page:horizontal { background: $accent; border-radius: 3px; }
+QSlider::handle:horizontal {
     width: 16px; height: 16px; margin: -7px 0; border-radius: 10px;
-    background: #ffffff; border: 2px solid {BLUE};
-}}
-QSlider::handle:horizontal:hover {{ background: #e8f0fe; }}
-QSlider::sub-page:horizontal:disabled {{ background: #c4c7cc; }}
-QSlider::handle:horizontal:disabled {{ border-color: #c4c7cc; background: #f1f3f4; }}
-#segment {{ background: #e6e6ea; border: 1px solid #d5d8dc; border-radius: 7px; }}
-#segment QPushButton {{
-    background: transparent; border: none; border-radius: 5px; padding: 5px 16px; color: #3c4043;
-}}
-#segment QPushButton:checked {{ background: #ffffff; color: #202124; font-weight: bold; }}
-#segment QPushButton:disabled {{ color: #9aa0a6; }}
+    background: $knob; border: 2px solid $accent;
+}
+QSlider::handle:horizontal:hover { background: $accent_soft; }
+QSlider::sub-page:horizontal:disabled { background: $disabled; }
+QSlider::handle:horizontal:disabled { border-color: $disabled; background: $chip; }
+#segment { background: $hover; border: 1px solid $track; border-radius: 7px; }
+#segment QPushButton {
+    background: transparent; border: none; border-radius: 5px; padding: 5px 16px; color: $text_body;
+}
+#segment QPushButton:checked { background: $surface; color: $text; font-weight: bold; }
+#segment QPushButton:disabled { color: $text_faint; }
 """
 
 
@@ -64,21 +64,21 @@ class Switch(QAbstractButton):
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         on, enabled = self.isChecked(), self.isEnabled()
         if enabled:
-            track = QColor(BLUE if on else "#9aa0a6")
+            track = theme.color("accent" if on else "switch_off")
         else:
-            track = QColor("#a8c7fa" if on else "#dadce0")
+            track = theme.color("accent_disabled" if on else "switch_off_disabled")
         width, height = float(self.width()), float(self.height())
         painter.setPen(Qt.PenStyle.NoPen)
         painter.setBrush(track)
         painter.drawRoundedRect(QRectF(0, 3, width, height - 6), (height - 6) / 2, (height - 6) / 2)
         knob = height - 10
         x = width - knob - 5 if on else 5.0
-        painter.setBrush(QColor("#ffffff"))
+        painter.setBrush(theme.color("knob"))
         painter.setPen(QPen(QColor(0, 0, 0, 40), 1))
         painter.drawEllipse(QRectF(x, 5, knob, knob))
         if self.hasFocus():  # 키보드로 옮겨 왔을 때 어디에 있는지 보이게
             painter.setBrush(Qt.BrushStyle.NoBrush)
-            painter.setPen(QPen(QColor(BLUE), 2))
+            painter.setPen(QPen(theme.color("accent"), 2))
             painter.drawRoundedRect(QRectF(1, 2, width - 2, height - 4), (height - 4) / 2, (height - 4) / 2)
         painter.end()
 
@@ -129,9 +129,9 @@ class _ValueBubble(QWidget):
         left = min(max(self.handle_center_x() - width / 2, 0), max(0, self.width() - width))
         box = QRectF(left, 0, width, self._HEIGHT - 4)
         painter.setPen(Qt.PenStyle.NoPen)
-        painter.setBrush(QColor(BLUE))
+        painter.setBrush(theme.color("accent"))
         painter.drawRoundedRect(box, 8, 8)
-        painter.setPen(QColor("#ffffff"))
+        painter.setPen(theme.color("on_accent"))
         painter.drawText(box, Qt.AlignmentFlag.AlignCenter, text)
         painter.end()
 

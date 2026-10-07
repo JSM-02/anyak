@@ -1,0 +1,280 @@
+"""앱 전체가 함께 쓰는 색·글자 크기와 라이트/다크 전환.
+
+화면마다 색을 직접 적지 않고 여기의 이름(토큰)을 쓴다. 스타일시트 문자열에는 `$text`, `$card` 같은
+자리표시자를 쓰고 `bind()`로 위젯에 붙이면, Windows 설정이 바뀔 때 모든 화면이 새 색으로 다시 칠해진다.
+직접 그리는 위젯(차트·스위치·점 화면)은 그릴 때마다 `palette()`에서 색을 읽는다.
+"""
+
+import weakref
+from dataclasses import asdict, dataclass
+from string import Template
+
+from PySide6.QtCore import Qt
+from PySide6.QtGui import QColor, QFont, QGuiApplication, QPalette
+from PySide6.QtWidgets import QWidget
+
+
+@dataclass(frozen=True)
+class Palette:
+    # 바탕
+    bg: str  # 페이지 바탕
+    surface: str  # 카드·팝업·입력칸 바탕
+    sidebar: str
+    sidebar_border: str
+    hover: str  # 버튼에 마우스를 올렸을 때, 분할 버튼의 바탕
+    chip: str  # 연한 버튼·표시 바탕
+    # 선
+    border: str  # 카드 테두리
+    border_strong: str  # 팝업·창 테두리
+    input_border: str
+    divider: str  # 카드 안 구분선
+    grid: str  # 차트 가로선
+    # 글자
+    text: str
+    text_body: str
+    text_secondary: str
+    text_muted: str
+    text_faint: str
+    on_accent: str  # 강조색 버튼 위의 글자
+    # 강조
+    accent: str
+    accent_hover: str
+    accent_soft: str
+    accent_disabled: str
+    disabled: str
+    track: str  # 슬라이더 홈
+    switch_off: str
+    switch_off_disabled: str
+    knob: str  # 스위치·슬라이더 손잡이
+    danger: str
+    warning: str
+
+
+LIGHT = Palette(
+    bg="#f5f5f7",
+    surface="#ffffff",
+    sidebar="#f0f0f3",
+    sidebar_border="#e0e0e4",
+    hover="#e6e6ea",
+    chip="#f1f3f4",
+    border="#e4e4e8",
+    border_strong="#c8ccd0",
+    input_border="#b8bcc2",
+    divider="#f0f0f3",
+    grid="#e0e0e5",
+    text="#202124",
+    text_body="#3c4043",
+    text_secondary="#5f6368",
+    text_muted="#80868b",
+    text_faint="#9aa0a6",
+    on_accent="#ffffff",
+    accent="#188038",
+    accent_hover="#137333",
+    accent_soft="#e6f4ea",
+    accent_disabled="#a8dab5",
+    disabled="#c4c7cc",
+    track="#d5d8dc",
+    switch_off="#9aa0a6",
+    switch_off_disabled="#dadce0",
+    knob="#ffffff",
+    danger="#c5221f",
+    warning="#9a5400",
+)
+
+DARK = Palette(
+    bg="#1b1c1f",
+    surface="#26282c",
+    sidebar="#222327",
+    sidebar_border="#34363b",
+    hover="#33353a",
+    chip="#2f3136",
+    border="#383a40",
+    border_strong="#4a4d54",
+    input_border="#5a5d65",
+    divider="#32343a",
+    grid="#3a3c42",
+    text="#e8eaed",
+    text_body="#c9ccd1",
+    text_secondary="#a9adb4",
+    text_muted="#8e929a",
+    text_faint="#6f737b",
+    on_accent="#0d2b17",
+    accent="#81c995",
+    accent_hover="#a8dab5",
+    accent_soft="#1f3a2a",
+    accent_disabled="#3a5a45",
+    disabled="#4a4d54",
+    track="#44474d",
+    switch_off="#6f737b",
+    switch_off_disabled="#3a3c42",
+    knob="#e8eaed",
+    danger="#f28b82",
+    warning="#fdc569",
+)
+
+# 글자 크기(px). 화면마다 제각각이던 값을 이 여덟 가지로 맞춘다.
+FONT_SIZES = {
+    "fs_caption": 12,
+    "fs_small": 13,
+    "fs_body": 14,
+    "fs_heading": 16,
+    "fs_icon": 20,
+    "fs_title": 24,
+    "fs_stat": 28,
+    "fs_display": 40,
+}
+FONT_FAMILIES = ("Segoe UI", "Malgun Gothic")  # 영문·숫자는 Segoe UI, 한글은 맑은 고딕
+
+_palette = LIGHT
+_system_palette: QPalette | None = None  # 다크로 바꾸기 전의 기본 팔레트. 라이트로 돌아올 때 되돌린다
+
+# 스크롤바는 스타일시트로 칠하지 않으면 시스템 기본(밝은) 모양이 남는다
+_SCROLLBAR_STYLE = """
+QScrollBar:vertical { background: transparent; width: 12px; margin: 0; }
+QScrollBar::handle:vertical { background: $track; border-radius: 4px; min-height: 28px; margin: 2px; }
+QScrollBar::handle:vertical:hover { background: $switch_off; }
+QScrollBar:horizontal { background: transparent; height: 12px; margin: 0; }
+QScrollBar::handle:horizontal { background: $track; border-radius: 4px; min-width: 28px; margin: 2px; }
+QScrollBar::handle:horizontal:hover { background: $switch_off; }
+QScrollBar::add-line, QScrollBar::sub-line, QScrollBar::add-page, QScrollBar::sub-page { background: none; border: none; width: 0; height: 0; }
+"""
+
+
+_listeners: list = []  # 테마가 바뀐 뒤 부를 함수. 메서드는 약한 참조로 들고 있어 위젯이 지워지는 것을 막지 않는다
+_bound: list[tuple[weakref.ref, str]] = []
+
+
+def palette() -> Palette:
+    return _palette
+
+
+def is_dark() -> bool:
+    return _palette is DARK
+
+
+def color(name: str) -> QColor:
+    """팔레트의 이름으로 QColor를 얻는다. 직접 그리는 위젯이 쓴다."""
+    return QColor(getattr(_palette, name))
+
+
+def render(template: str) -> str:
+    """스타일시트 틀의 `$이름`을 지금 팔레트·글자 크기로 채운다."""
+    values: dict[str, str | int] = dict(asdict(_palette))
+    values.update({name: f"{px}px" for name, px in FONT_SIZES.items()})
+    return Template(template + _SCROLLBAR_STYLE).substitute(values)
+
+
+def bind(widget: QWidget, template: str) -> None:
+    """위젯에 스타일시트를 붙이고, 테마가 바뀌면 다시 채워서 붙인다."""
+    _bound.append((weakref.ref(widget), template))
+    widget.setStyleSheet(render(template))
+
+
+def set_dark(dark: bool) -> None:
+    """라이트/다크를 바꾸고 붙여 둔 스타일시트를 모두 다시 적용한다."""
+    global _palette
+    new = DARK if dark else LIGHT
+    if new is _palette:
+        return
+    _palette = new
+    _apply_app_palette()
+    alive = []
+    for ref, template in _bound:
+        widget = ref()
+        if widget is None:
+            continue
+        try:
+            widget.setStyleSheet(render(template))
+        except RuntimeError:  # C++ 쪽이 이미 사라진 위젯
+            continue
+        alive.append((ref, template))
+    _bound[:] = alive
+    for listener in list(_listeners):
+        callback = listener() if isinstance(listener, weakref.WeakMethod) else listener
+        if callback is None:
+            _listeners.remove(listener)
+            continue
+        try:
+            callback()
+        except RuntimeError:  # C++ 쪽이 이미 사라진 위젯의 메서드
+            _listeners.remove(listener)
+
+
+def on_changed(callback) -> None:
+    """테마가 바뀐 뒤 불린다. 스타일시트로 칠하지 않는 위젯이 다시 그리도록 쓴다."""
+    _listeners.append(weakref.WeakMethod(callback) if hasattr(callback, "__self__") else callback)
+
+
+def _apply_app_palette() -> None:
+    """스타일시트가 닿지 않는 기본 위젯(글자, 선택 색 등)도 같은 색을 쓰도록 앱 팔레트를 맞춘다."""
+    global _system_palette
+    app = QGuiApplication.instance()
+    if app is None:
+        return
+    if _palette is LIGHT:
+        if _system_palette is not None:
+            app.setPalette(_system_palette)
+            _system_palette = None
+        return
+    if _system_palette is None:
+        _system_palette = QPalette(app.palette())
+    p, qp = _palette, QPalette()
+    for role, name in (
+        (QPalette.ColorRole.Window, "bg"),
+        (QPalette.ColorRole.WindowText, "text"),
+        (QPalette.ColorRole.Base, "surface"),
+        (QPalette.ColorRole.AlternateBase, "chip"),
+        (QPalette.ColorRole.Text, "text"),
+        (QPalette.ColorRole.Button, "chip"),
+        (QPalette.ColorRole.ButtonText, "text"),
+        (QPalette.ColorRole.Highlight, "accent"),
+        (QPalette.ColorRole.HighlightedText, "on_accent"),
+        (QPalette.ColorRole.PlaceholderText, "text_muted"),
+        (QPalette.ColorRole.ToolTipBase, "surface"),
+        (QPalette.ColorRole.ToolTipText, "text"),
+    ):
+        qp.setColor(role, QColor(getattr(p, name)))
+    app.setPalette(qp)
+
+
+def _reset_for_tests() -> None:
+    """테스트가 앞선 테스트에서 남은 위젯·연결에 영향받지 않도록 등록을 비운다."""
+    _bound.clear()
+    global _mode
+    _mode = "system"
+    _listeners.clear()
+    set_dark(False)
+
+
+_mode = "system"  # 설정의 화면 모드: system(Windows를 따라감) / light / dark
+_SCHEMES = {"system": Qt.ColorScheme.Unknown, "light": Qt.ColorScheme.Light, "dark": Qt.ColorScheme.Dark}
+
+
+def _resolve() -> None:
+    if _mode == "system":
+        app = QGuiApplication.instance()
+        set_dark(app is not None and app.styleHints().colorScheme() == Qt.ColorScheme.Dark)
+    else:
+        set_dark(_mode == "dark")
+
+
+def set_mode(mode: str) -> None:
+    """화면 모드를 정한다. 'system'이면 Windows의 앱 모드를 따라가고, 'light'·'dark'면 고정한다."""
+    global _mode
+    _mode = mode if mode in _SCHEMES else "system"
+    app = QGuiApplication.instance()
+    if app is not None:
+        app.styleHints().setColorScheme(_SCHEMES[_mode])  # 창 제목 막대 같은 시스템 부분도 같은 모드로
+    _resolve()
+
+
+def follow_system(app: QGuiApplication) -> None:
+    """Windows의 앱 모드(라이트/다크)가 바뀌면 바로 반영한다 ('시스템 설정' 모드일 때만 따라간다)."""
+    app.styleHints().colorSchemeChanged.connect(lambda _scheme: _resolve())
+    _resolve()
+
+
+def apply_app_font(app: QGuiApplication) -> None:
+    font = QFont(app.font())
+    font.setFamilies(list(FONT_FAMILIES))
+    app.setFont(font)

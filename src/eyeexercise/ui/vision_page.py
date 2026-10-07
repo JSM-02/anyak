@@ -30,6 +30,7 @@ from eyeexercise.core.vision import (
     parse_date_text,
     trend_deltas,
 )
+from eyeexercise.ui import theme
 from eyeexercise.ui.controls import CONTROLS_STYLE, Segmented
 
 SAVE_FAILED_MESSAGE = "파일에 저장하지 못했어요. 입력한 내용은 그대로 두었으니 잠시 후 다시 눌러 주세요."
@@ -38,36 +39,39 @@ EMPTY_MESSAGE = "아직 기록이 없어요. 병원에서 시력검사를 받았
 CONFIRM_DELETE_TEXT = "정말 삭제"
 
 _STYLE = """
-#visionPage, #visionContent { background: #f5f5f7; }
+#visionPage, #visionContent { background: $bg; }
 #visionPage QLabel { background: transparent; }
-#pageTitle { font-size: 24px; font-weight: bold; }
-#sectionTitle { font-size: 16px; font-weight: bold; padding-top: 6px; }
-#card { background: #ffffff; border: 1px solid #e4e4e8; border-radius: 8px; }
-#fieldLabel { font-size: 13px; color: #5f6368; }
-#hint { font-size: 12px; color: #5f6368; }
-#formError { font-size: 13px; color: #c5221f; }
-#empty { font-size: 14px; color: #80868b; padding: 18px 0; }
+#pageTitle { font-size: $fs_title; font-weight: bold; }
+#sectionTitle { font-size: $fs_heading; font-weight: bold; padding-top: 6px; }
+#card { background: $surface; border: 1px solid $border; border-radius: 8px; }
+#fieldLabel { font-size: $fs_small; color: $text_secondary; }
+#hint { font-size: $fs_caption; color: $text_secondary; }
+#formError { font-size: $fs_small; color: $danger; }
+#empty { font-size: $fs_body; color: $text_muted; padding: 18px 0; }
 #visionPage QLineEdit {
-    background: #ffffff; border: 1px solid #b8bcc2; border-radius: 6px; padding: 6px 8px; color: #202124;
+    background: $surface; border: 1px solid $input_border; border-radius: 6px; padding: 6px 8px; color: $text;
 }
-#visionPage QLineEdit:focus { border: 1px solid #1a73e8; }
+#visionPage QLineEdit:focus { border: 1px solid $accent; }
 #primaryButton {
-    background: #1a73e8; color: #ffffff; border: none; border-radius: 6px; padding: 7px 18px; font-weight: bold;
+    background: $accent; color: $on_accent; border: none; border-radius: 6px; padding: 7px 18px; font-weight: bold;
 }
-#primaryButton:hover { background: #1765cc; }
+#primaryButton:hover { background: $accent_hover; }
 #secondaryButton {
-    background: #ffffff; color: #3c4043; border: 1px solid #b8bcc2; border-radius: 6px; padding: 7px 14px;
+    background: $surface; color: $text_body; border: 1px solid $input_border; border-radius: 6px; padding: 7px 14px;
 }
-#secondaryButton:hover { background: #f1f3f4; }
-#rowButton { background: transparent; border: none; color: #1a73e8; padding: 4px 8px; }
-#rowButton:hover { color: #1765cc; text-decoration: underline; }
-#dangerButton { background: transparent; border: none; color: #c5221f; padding: 4px 8px; }
+#secondaryButton:hover { background: $chip; }
+#rowButton { background: transparent; border: none; color: $accent; padding: 4px 8px; }
+#rowButton:hover { color: $accent_hover; text-decoration: underline; }
+#dangerButton { background: transparent; border: none; color: $danger; padding: 4px 8px; }
 #dangerButton:hover { text-decoration: underline; }
-#rowDate { font-size: 14px; font-weight: bold; }
-#acuity { font-size: 14px; }
-#delta { font-size: 12px; }
-#kind { font-size: 12px; color: #5f6368; background: #f1f3f4; border-radius: 8px; padding: 2px 8px; }
-#memo { font-size: 12px; color: #5f6368; }
+#rowDate { font-size: $fs_body; font-weight: bold; }
+#acuity { font-size: $fs_body; }
+#delta { font-size: $fs_caption; color: $text_secondary; }
+#delta[trend="up"] { color: $accent; }
+#delta[trend="down"] { color: $warning; }
+#divider { background: $divider; }
+#kind { font-size: $fs_caption; color: $text_secondary; background: $chip; border-radius: 8px; padding: 2px 8px; }
+#memo { font-size: $fs_caption; color: $text_secondary; }
 """ + CONTROLS_STYLE
 
 _KIND_OPTIONS = (("나안", False), ("교정(안경·렌즈)", True))
@@ -78,14 +82,14 @@ def _acuity_text(value: float | None) -> str:
 
 
 def _delta_text(delta: float | None) -> tuple[str, str]:
-    """(글자, 색). 시력은 높을수록 좋으므로 오르면 파랑, 내리면 주황으로 보인다."""
+    """(글자, 추세). 시력은 높을수록 좋으므로 오르면 파랑(up), 내리면 주황(down)으로 보인다."""
     if delta is None:
-        return "", "#5f6368"
+        return "", ""
     if delta > 0:
-        return f"▲ {delta:g}", "#1a73e8"
+        return f"▲ {delta:g}", "up"
     if delta < 0:
-        return f"▼ {-delta:g}", "#b06000"
-    return "변화 없음", "#5f6368"
+        return f"▼ {-delta:g}", "down"
+    return "변화 없음", ""
 
 
 class VisionPage(QWidget):
@@ -100,7 +104,7 @@ class VisionPage(QWidget):
 
         self.setObjectName("visionPage")
         self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground)
-        self.setStyleSheet(_STYLE)
+        theme.bind(self, _STYLE)
 
         title = QLabel("시력 기록")
         title.setObjectName("pageTitle")
@@ -304,7 +308,7 @@ class VisionPage(QWidget):
             if i:
                 line = QFrame()
                 line.setFixedHeight(1)
-                line.setStyleSheet("background: #f0f0f3;")
+                line.setObjectName("divider")
                 self._rows.addWidget(line)
             self._rows.addWidget(self._row(record, deltas[record.id]))
 
@@ -361,11 +365,11 @@ class VisionPage(QWidget):
         label = QLabel(f"{name} {_acuity_text(value)}")
         label.setObjectName("acuity")
         layout.addWidget(label)
-        text, color = _delta_text(delta)
+        text, trend = _delta_text(delta)
         if text:
             change = QLabel(text)
             change.setObjectName("delta")
-            change.setStyleSheet(f"color: {color};")
+            change.setProperty("trend", trend)
             layout.addWidget(change)
         return layout
 

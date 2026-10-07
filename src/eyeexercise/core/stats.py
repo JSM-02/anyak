@@ -1,4 +1,4 @@
-"""기록 탭에 보여 줄 요약 (GUI 없음). 일·주·월 단위로 막대 차트, 하이라이트, 최근 기록을 만든다.
+"""기록 탭에 보여 줄 요약 (GUI 없음). 일·주·월 단위로 막대 차트, 하이라이트, 하루 타임라인(최근 기록)을 만든다.
 
 날짜는 모두 로컬 시간대 기준이다. `tz`가 None이면 시스템 로컬 시간대를 쓰고, 테스트에서는 고정 시간대를 넘긴다.
 """
@@ -55,26 +55,6 @@ class Highlight:
     detail: str = ""  # 값 아래 작은 보조 설명 (예: "화요일"). 없으면 빈 문자열
     compare: str = ""  # 앞 기간과의 비교 한 줄 (예: "지난 주보다 하루 평균 0.3회 많아요"). 화살표는 화면이 붙인다
     trend: str = "same"  # compare의 추세: up / down / same
-
-
-@dataclass(frozen=True)
-class RecentRow:
-    """최근 기록 표의 한 줄."""
-
-    clock: str  # "14:32"
-    name: str  # 운동 이름. 건너뜀·미룸은 빈 문자열
-    kind: str  # completed / skipped / snoozed
-    result: str  # "완료", "건너뜀", "미룸"
-    length: str  # 완료한 운동 시간 ("1분 6초"). 그 외는 빈 문자열
-    exercise: str = ""  # 완료한 운동의 종류 키 ("blink", "dot_follow"). 그 외는 빈 문자열
-
-
-@dataclass(frozen=True)
-class RecentGroup:
-    """같은 날의 기록 묶음. 제목은 "오늘", "어제", "10월 3일 (토)"."""
-
-    title: str
-    rows: list[RecentRow]
 
 
 # ---- 기간 계산 ----
@@ -243,30 +223,92 @@ def format_duration(seconds: int) -> str:
     return f"{hours}시간 {minutes}분" if minutes else f"{hours}시간"
 
 
-def recent_groups(
-    events: Iterable[HistoryEvent], now: datetime, limit: int = 10, tz: tzinfo | None = None
-) -> list[RecentGroup]:
-    """가장 최근 기록부터 limit줄을 날짜별로 묶는다. 같은 날은 최신순이고 날짜도 최신순이다."""
+# ---- 하루 타임라인 (최근 기록) ----
+
+MIN_ACTIVE_SECONDS = 60  # 한 시간대에 이만큼은 써야 '사용한 시간대'로 본다
+
+
+@dataclass(frozen=True)
+class TimelineMark:
+    """하루 줄 위에 찍는 점 하나 (운동 완료, 건너뜀, 미룸)."""
+
+    minute: float  # 자정부터의 분 (0~1440)
+    kind: str  # completed / skipped / snoozed
+    exercise: str  # 완료한 운동의 종류 키. 그 외는 빈 문자열
+    tip: str  # 마우스를 올렸을 때 보여 줄 설명 ("14:32 깜빡임 완료 · 1분 6초")
+
+
+@dataclass(frozen=True)
+class TimelineDay:
+    title: str  # "오늘", "어제", "10월 3일 (토)"
+    hours: list[float]  # 시간대별(0~23시) 스크린 타임(초)
+    marks: list[TimelineMark]  # 시간순
+    total_seconds: float
+    completed: int
+    span: str  # "9시~18시대"처럼 스크린 타임이 있던 처음~마지막 시간대. 없으면 빈 문자열
+
+    @property
+    def is_empty(self) -> bool:
+        return not self.marks and self.total_seconds <= 0
+
+    def hour_marks(self, hour: int) -> list[TimelineMark]:
+        """hour시(0~23)에 일어난 점들. 시간순."""
+        return [m for m in self.marks if int(m.minute // 60) == hour]
+
+
+def usage_span(hours: Iterable[float]) -> str:
+    """스크린 타임이 있던 처음과 마지막 시간대. 시간대 단위(1시간)로만 알 수 있어서 '대'를 붙인다."""
+    active = [h for h, seconds in enumerate(hours) if seconds >= MIN_ACTIVE_SECONDS]
+    if not active:
+        return ""
+    first, last = active[0], active[-1]
+    return f"{first}시대" if first == last else f"{first}시~{last}시대"
+
+
+def _mark(e: HistoryEvent, local: datetime) -> TimelineMark | None:
+    minute = local.hour * 60 + local.minute + local.second / 60
+    clock = f"{local:%H:%M}"
+    if e.type == EVENT_COMPLETED:
+        name = EXERCISE_NAMES.get(e.exercise or "", e.exercise or "운동")
+        length = f" · {format_duration(e.duration_seconds)}" if e.duration_seconds else ""
+        return TimelineMark(minute, EVENT_COMPLETED, e.exercise or "", f"{clock} {name} 완료{length}")
+    if e.type == EVENT_SKIPPED:
+        return TimelineMark(minute, EVENT_SKIPPED, "", f"{clock} 건너뜀")
+    if e.type == EVENT_SNOOZED:
+        return TimelineMark(minute, EVENT_SNOOZED, "", f"{clock} 미룸")
+    return None
+
+
+def timeline_days(
+    events: Iterable[HistoryEvent], usage: UsageLog, now: datetime, days: int = 7, tz: tzinfo | None = None
+) -> list[TimelineDay]:
+    """오늘부터 거슬러 올라가는 days일의 하루 타임라인. 기록이 없는 날도 한 줄을 차지한다."""
     today = now.astimezone(tz).date()
-    groups: list[RecentGroup] = []
-    for e in sorted(events, key=lambda e: e.ts, reverse=True)[:limit]:
+    first_day = today - timedelta(days=days - 1)
+    marks: dict[date, list[TimelineMark]] = {}
+    for e in sorted(events, key=lambda e: e.ts):
         local = e.ts.astimezone(tz)
-        if e.type == EVENT_COMPLETED:
-            name = EXERCISE_NAMES.get(e.exercise or "", e.exercise or "운동")
-            length = format_duration(e.duration_seconds) if e.duration_seconds else ""
-            row = RecentRow(f"{local:%H:%M}", name, EVENT_COMPLETED, "완료", length, e.exercise or "")
-        elif e.type == EVENT_SKIPPED:
-            row = RecentRow(f"{local:%H:%M}", "", EVENT_SKIPPED, "건너뜀", "")
-        elif e.type == EVENT_SNOOZED:
-            row = RecentRow(f"{local:%H:%M}", "", EVENT_SNOOZED, "미룸", "")
-        else:
+        if not first_day <= local.date() <= today:
             continue
-        title = range_title(Period.DAY, local.date(), today)
-        if groups and groups[-1].title == title:
-            groups[-1].rows.append(row)
-        else:
-            groups.append(RecentGroup(title, [row]))
-    return groups
+        mark = _mark(e, local)
+        if mark is not None:
+            marks.setdefault(local.date(), []).append(mark)
+    result = []
+    for i in range(days):
+        day = today - timedelta(days=i)
+        hours = usage.hourly(day)
+        day_marks = marks.get(day, [])
+        result.append(
+            TimelineDay(
+                range_title(Period.DAY, day, today),
+                hours,
+                day_marks,
+                sum(hours),
+                sum(1 for m in day_marks if m.kind == EVENT_COMPLETED),
+                usage_span(hours),
+            )
+        )
+    return result
 
 
 # ---- 차트 눈금 ----
@@ -341,15 +383,6 @@ def usage_highlights(period: Period, summary: UsageSummary, completed: int) -> l
     if period is Period.DAY:
         return [Highlight("가장 많이 쓴 시간", peak_value, peak_label), Highlight("사용한 시간대", f"{summary.active_buckets}개"), exercise]
     return [Highlight("하루 평균", format_usage(summary.average_per_day)), Highlight("가장 많이 쓴 날", peak_value, peak_label), exercise]
-
-
-def usage_daily_rows(usage: UsageLog, today: date, days: int = 7) -> list[tuple[str, float]]:
-    """오늘부터 거슬러 올라가는 (날짜 이름, 사용 시간(초)) 목록."""
-    rows = []
-    for i in range(days):
-        day = today - timedelta(days=i)
-        rows.append((range_title(Period.DAY, day, today), usage.total(day)))
-    return rows
 
 
 def format_usage(seconds: float) -> str:

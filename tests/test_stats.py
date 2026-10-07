@@ -13,7 +13,8 @@ from eyeexercise.core.stats import (
     range_bounds,
     range_caption,
     range_title,
-    recent_groups,
+    timeline_days,
+    usage_span,
     shift_anchor,
     summarize_range,
     week_start,
@@ -259,69 +260,83 @@ def test_시간_표시(seconds, text):
     assert format_duration(seconds) == text
 
 
-# ---- 최근 기록 (날짜별 표) ----
+# ---- 하루 타임라인 (최근 기록) ----
 
 
-def test_최근_기록은_날짜별로_묶이고_최신순이다():
-    events = [
-        done(at(10, 7, 14, 4), "blink", 66),
-        done(at(10, 7, 14, 32), "dot_follow", 60),
-        skipped(at(10, 7, 13, 59)),
-        snoozed(at(10, 6, 12)),
-        done(at(10, 3, 9, 5)),
-    ]
-    groups = recent_groups(events, NOW, tz=KST)
-    assert [g.title for g in groups] == ["오늘", "어제", "10월 3일 (토)"]
-    assert [r.clock for r in groups[0].rows] == ["14:32", "14:04", "13:59"]
-    assert [r.clock for r in groups[1].rows] == ["12:00"]
+def timeline(events=(), entries=(), days=7, now=NOW):
+    return timeline_days(events, make_usage(entries), now, days, KST)
 
 
-def test_표의_한_줄은_시간_운동_결과_길이를_가진다():
-    events = [done(at(10, 7, 14, 32), "dot_follow", 60), done(at(10, 7, 14, 4), "blink", 66), skipped(at(10, 7, 13, 59)), snoozed(at(10, 7, 13, 0))]
-    rows = recent_groups(events, NOW, tz=KST)[0].rows
-    assert (rows[0].clock, rows[0].name, rows[0].kind, rows[0].result, rows[0].length) == ("14:32", "점 따라가기", "completed", "완료", "1분")
-    assert (rows[1].name, rows[1].length) == ("깜빡임", "1분 6초")
-    assert (rows[2].name, rows[2].kind, rows[2].result, rows[2].length) == ("", "skipped", "건너뜀", "")
-    assert (rows[3].kind, rows[3].result) == ("snoozed", "미룸")
+def test_타임라인은_오늘부터_거슬러_올라가는_날짜_줄이다():
+    days = timeline()
+    assert [d.title for d in days] == ["오늘", "어제", "10월 5일 (월)", "10월 4일 (일)", "10월 3일 (토)", "10월 2일 (금)", "10월 1일 (목)"]
+    assert all(d.is_empty for d in days)  # 기록이 없는 날도 한 줄을 차지한다
+    assert len(timeline(days=3)) == 3
 
 
-def test_최근_기록은_줄_수로_제한한다():
-    events = [done(at(10, 7, h)) for h in range(0, 12)] + [done(at(10, 6, 12))]
-    groups = recent_groups(events, NOW, limit=5, tz=KST)
-    assert sum(len(g.rows) for g in groups) == 5
-    assert [g.title for g in groups] == ["오늘"]
-    assert groups[0].rows[0].clock == "11:00"
+def test_점은_시각_종류_설명을_가진다():
+    events = [done(at(10, 7, 14, 32), "dot_follow", 60), done(at(10, 7, 14, 4), "blink", 66), skipped(at(10, 7, 13, 59)), snoozed(at(10, 7, 0, 0))]
+    marks = timeline(events)[0].marks
+    assert [m.minute for m in marks] == [0, 13 * 60 + 59, 14 * 60 + 4, 14 * 60 + 32]  # 시간순
+    assert [m.kind for m in marks] == ["snoozed", "skipped", "completed", "completed"]
+    assert [m.exercise for m in marks] == ["", "", "blink", "dot_follow"]
+    assert [m.tip for m in marks] == ["00:00 미룸", "13:59 건너뜀", "14:04 깜빡임 완료 · 1분 6초", "14:32 점 따라가기 완료 · 1분"]
 
 
-def test_제한이_날짜_묶음_중간에서_끊겨도_앞_묶음은_그대로():
-    events = [done(at(10, 7, 9)), done(at(10, 7, 10)), done(at(10, 6, 9)), done(at(10, 6, 10)), done(at(10, 6, 11))]
-    groups = recent_groups(events, NOW, limit=3, tz=KST)
-    assert [(g.title, len(g.rows)) for g in groups] == [("오늘", 2), ("어제", 1)]
-    assert groups[1].rows[0].clock == "11:00"
+def test_날짜마다_완료_횟수를_센다():
+    events = [done(at(10, 7, 9)), done(at(10, 7, 10)), skipped(at(10, 7, 11)), done(at(10, 6, 9))]
+    days = timeline(events)
+    assert (days[0].completed, days[1].completed) == (2, 1)
+    assert len(days[0].marks) == 3
 
 
 def test_자정을_기준으로_오늘과_어제가_나뉜다():
     events = [done(datetime(2026, 10, 7, 0, 1, tzinfo=KST)), done(datetime(2026, 10, 6, 23, 59, tzinfo=KST))]
-    assert [g.title for g in recent_groups(events, NOW, tz=KST)] == ["오늘", "어제"]
+    days = timeline(events)
+    assert [len(d.marks) for d in days[:2]] == [1, 1]
+    assert days[1].marks[0].minute == pytest.approx(23 * 60 + 59)
 
 
-def test_기록이_없으면_빈_목록():
-    assert recent_groups([], NOW, tz=KST) == []
+def test_보여_주는_기간_밖의_기록은_빠진다():
+    events = [done(at(10, 1, 9)), done(at(9, 30, 9))]
+    days = timeline(events, days=7)
+    assert sum(len(d.marks) for d in days) == 1  # 10월 1일은 7일 안, 9월 30일은 밖
 
 
 def test_모르는_운동_이름은_그대로_보여_준다():
-    row = recent_groups([done(at(10, 7), "jumping", 10)], NOW, tz=KST)[0].rows[0]
-    assert row.name == "jumping"
+    assert timeline([done(at(10, 7), "jumping", 10)])[0].marks[0].tip == "12:00 jumping 완료 · 10초"
 
 
-def test_완료_시간이_없으면_길이는_비어_있다():
-    row = recent_groups([HistoryEvent(at(10, 7), "completed", "blink", None)], NOW, tz=KST)[0].rows[0]
-    assert (row.result, row.length) == ("완료", "")
+def test_완료_시간이_없으면_길이는_설명에_없다():
+    events = [HistoryEvent(at(10, 7), "completed", "blink", None)]
+    assert timeline(events)[0].marks[0].tip == "12:00 깜빡임 완료"
 
 
 def test_모르는_종류의_이벤트는_건너뛴다():
-    groups = recent_groups([HistoryEvent(at(10, 7), "unknown"), done(at(10, 7, 9))], NOW, tz=KST)
-    assert [len(g.rows) for g in groups] == [1]
+    days = timeline([HistoryEvent(at(10, 7), "unknown"), done(at(10, 7, 9))])
+    assert len(days[0].marks) == 1
+
+
+def test_스크린_타임은_시간대별_초와_합계와_범위를_담는다():
+    days = timeline(entries=[(10, 7, 9, 3600), (10, 7, 10, 1800), (10, 7, 18, 120), (10, 6, 9, 1800)])
+    today = days[0]
+    assert today.hours[9] == 3600 and today.hours[10] == 1800 and today.hours[18] == 120
+    assert today.total_seconds == 5520
+    assert today.span == "9시~18시대"
+    assert days[1].span == "9시대"
+    assert not today.is_empty
+
+
+def test_범위는_1분_이상_쓴_시간대만_본다():
+    assert usage_span([0] * 24) == ""
+    assert usage_span([30] + [0] * 23) == ""  # 30초는 사용으로 보지 않는다
+    hours = [0.0] * 24
+    hours[3], hours[4], hours[20] = 59, 60, 3600
+    assert usage_span(hours) == "4시~20시대"
+
+
+def test_스크린_타임만_있어도_빈_날이_아니다():
+    assert not timeline(entries=[(10, 7, 9, 600)])[0].is_empty
 
 
 # ---- 차트 눈금 ----
@@ -449,16 +464,6 @@ def test_스크린_타임_사용이_없으면_가장_많은_날은_대시():
     assert [c.detail for c in cards] == ["", "", ""]
 
 
-def test_최근_7일_일별_사용_시간():
-    from eyeexercise.core.stats import usage_daily_rows
-
-    usage = make_usage([(10, 7, 9, 3600), (10, 6, 9, 1800), (10, 1, 9, 600)])
-    rows = usage_daily_rows(usage, TODAY)
-    assert [r[0] for r in rows] == ["오늘", "어제", "10월 5일 (월)", "10월 4일 (일)", "10월 3일 (토)", "10월 2일 (금)", "10월 1일 (목)"]
-    assert [r[1] for r in rows] == [3600, 1800, 0, 0, 0, 0, 600]
-    assert len(usage_daily_rows(usage, TODAY, days=3)) == 3
-
-
 @pytest.mark.parametrize(
     ("seconds", "text", "parts"),
     [
@@ -514,14 +519,6 @@ def test_세로축_가운데_눈금도_깔끔하다():
         assert axis % 60 == 0
         assert (axis // 2) % 300 == 0, axis  # 가운데 눈금이 5분 단위로 떨어진다 (15분, 30분, 1시간 30분…)
         assert format_usage_axis(axis // 2)
-
-
-# ---- 최근 기록: 운동 종류 키 ----
-
-
-def test_완료한_운동의_종류_키를_돌려준다():
-    rows = recent_groups([done(at(10, 7, 14), "dot_follow"), done(at(10, 7, 13), "blink"), skipped(at(10, 7, 12)), snoozed(at(10, 7, 11))], NOW, tz=KST)[0].rows
-    assert [r.exercise for r in rows] == ["dot_follow", "blink", "", ""]
 
 
 # ---- 어제와 비교 (어제 하루 전체와 비교한다) ----

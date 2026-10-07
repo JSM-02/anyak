@@ -28,14 +28,17 @@ from eyeexercise.core.settings import (
     IDLE_PAUSE_MINUTES_RANGE,
     IDLE_RESET_MINUTES_RANGE,
     INTERVAL_MINUTES_RANGE,
+    APPEARANCES,
     SNOOZE_MINUTES_RANGE,
     SPEEDS,
     Settings,
 )
 from eyeexercise.core.settings_manager import SettingsManager
 from eyeexercise.core.stats import format_duration
+from eyeexercise.ui import theme
 from eyeexercise.ui.controls import CONTROLS_STYLE, LabeledSlider, Segmented, Switch
 
+APPEARANCE_LABELS = {"system": "시스템 설정", "light": "라이트", "dark": "다크"}
 SPEED_LABELS = {"slow": "느리게", "normal": "보통", "fast": "빠르게"}
 SAVE_FAILED_MESSAGE = "설정을 파일에 저장하지 못했어요. 이번 실행에서만 적용돼요."
 BOTH_OFF_MESSAGE = "두 운동을 모두 끄면 알림이 와도 운동이 시작되지 않아요."
@@ -45,18 +48,19 @@ ADVANCED_OPEN = "▾  고급 설정"
 DOT_STEP_SECONDS = 10  # 점 따라가기 시간 슬라이더의 한 칸
 
 _STYLE = """
-#settingsPage, #settingsContent { background: #f5f5f7; }
+#settingsPage, #settingsContent { background: $bg; }
 #settingsPage QLabel { background: transparent; }
-#pageTitle { font-size: 24px; font-weight: bold; }
-#sectionTitle { font-size: 16px; font-weight: bold; padding-top: 6px; }
-#card { background: #ffffff; border: 1px solid #e4e4e8; border-radius: 8px; }
-#rowTitle { font-size: 14px; }
-#rowHint { font-size: 12px; color: #5f6368; }
-#warning { font-size: 13px; color: #b06000; }
-#saveStatus { font-size: 13px; color: #c5221f; }
-#sliderValue { font-size: 14px; font-weight: bold; }
-#advancedToggle { background: transparent; border: none; text-align: left; font-size: 15px; font-weight: bold; color: #1a73e8; padding: 8px 0; }
-#advancedToggle:hover { color: #1765cc; }
+#pageTitle { font-size: $fs_title; font-weight: bold; }
+#sectionTitle { font-size: $fs_heading; font-weight: bold; padding-top: 6px; }
+#divider { background: $divider; }
+#card { background: $surface; border: 1px solid $border; border-radius: 8px; }
+#rowTitle { font-size: $fs_body; }
+#rowHint { font-size: $fs_caption; color: $text_secondary; }
+#warning { font-size: $fs_small; color: $warning; }
+#saveStatus { font-size: $fs_small; color: $danger; }
+#sliderValue { font-size: $fs_body; font-weight: bold; }
+#advancedToggle { background: transparent; border: none; text-align: left; font-size: $fs_heading; font-weight: bold; color: $accent; padding: 8px 0; }
+#advancedToggle:hover { color: $accent_hover; }
 """ + CONTROLS_STYLE
 
 
@@ -70,7 +74,7 @@ def _card(rows: list[QWidget]) -> QFrame:
         if i:
             line = QFrame()
             line.setFixedHeight(1)
-            line.setStyleSheet("background: #f0f0f3;")
+            line.setObjectName("divider")
             layout.addWidget(line)
         layout.addWidget(row)
     return frame
@@ -88,7 +92,7 @@ class SettingsPage(QWidget):
 
         self.setObjectName("settingsPage")
         self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground)
-        self.setStyleSheet(_STYLE)
+        theme.bind(self, _STYLE)
 
         title = QLabel("설정")
         title.setObjectName("pageTitle")
@@ -127,6 +131,11 @@ class SettingsPage(QWidget):
             ],
         )
         body.addWidget(self._warning)
+        self._add_section(
+            body,
+            "화면",
+            [self._appearance_row()],
+        )
         self._add_section(
             body,
             "소리와 시작",
@@ -282,6 +291,13 @@ class SettingsPage(QWidget):
         self._controls[path] = segmented
         return self._row(title, hint, segmented)
 
+    def _appearance_row(self) -> QWidget:
+        """화면 모드: 시스템 설정 / 라이트 / 다크."""
+        segmented = Segmented([(APPEARANCE_LABELS[mode], mode) for mode in APPEARANCES])
+        segmented.changed.connect(lambda value: self._changed({"appearance": value}))
+        self._controls["appearance"] = segmented
+        return self._row("화면 모드", "시스템 설정을 고르면 Windows의 앱 모드를 따라가요.", segmented)
+
     def _length_row(self) -> QWidget:
         """운동 길이: 짧게 / 보통 / 길게. 두 운동의 길이가 함께 바뀐다."""
         preset = Segmented([(p.label, p.key) for p in LENGTH_PRESETS])
@@ -346,6 +362,7 @@ class SettingsPage(QWidget):
             "exercises.dot_follow.speed": ex.dot_follow.speed,
             "sound.enabled": settings.sound.enabled,
             "show_main_window_on_start": settings.show_main_window_on_start,
+            "appearance": settings.appearance,
         }
 
     def _update_hints(self, settings: Settings) -> None:

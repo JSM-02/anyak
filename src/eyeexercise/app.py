@@ -16,8 +16,9 @@ from eyeexercise.core.settings_manager import SettingsManager
 from eyeexercise.core.usage import UsageTracker
 from eyeexercise.core.vision import VisionLog
 from eyeexercise.platform.win_idle import WinIdleSource
-from eyeexercise.platform.win_window import allow_any_process_to_set_foreground
+from eyeexercise.platform.win_window import allow_any_process_to_set_foreground, set_app_user_model_id
 from eyeexercise.storage import json_store, paths
+from eyeexercise.ui import theme
 from eyeexercise.ui.controller import Controller
 from eyeexercise.ui.exercise_window import ExerciseWindow
 from eyeexercise.ui.icons import app_icon
@@ -34,6 +35,7 @@ class TrayApp:
     def __init__(self, app: QApplication, settings: Settings) -> None:
         self._app = app
         self._settings = settings
+        theme.set_mode(settings.appearance)  # 창을 만들기 전에 정해야 처음부터 맞는 색으로 뜬다
         self._hide_hint_shown = False
 
         clock, idle = SystemClock(), WinIdleSource()
@@ -108,6 +110,8 @@ class TrayApp:
         self.controller.apply_settings(new)
         if new.snooze_minutes != old.snooze_minutes:
             self.popup.set_snooze_minutes(new.snooze_minutes)
+        if new.appearance != old.appearance:
+            theme.set_mode(new.appearance)
         if new.sound.enabled != old.sound.enabled:
             self.exercise_window.set_speaker(create_speaker(new.sound.enabled))
 
@@ -157,7 +161,10 @@ def _install_sigint_handler(tray_app: TrayApp) -> QTimer:
 
 def run() -> int:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+    set_app_user_model_id("EyeExercise.EyeExercise")  # 작업 표시줄에 파이썬이 아닌 우리 아이콘이 보이게
     app = QApplication(sys.argv)
+    theme.apply_app_font(app)
+    theme.follow_system(app)  # Windows의 라이트/다크 설정을 따라가고, 바뀌면 바로 반영한다
     app.setApplicationName("EyeExercise")
     app.setQuitOnLastWindowClosed(False)  # 트레이 상주 앱: 창이 없어도 종료하지 않는다
     app.setWindowIcon(app_icon())

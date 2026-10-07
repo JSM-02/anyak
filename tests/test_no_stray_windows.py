@@ -125,3 +125,15 @@ def test_고급_설정을_펼치고_접는_동안에도_작은_창이_뜨지_않
     page.control("exercises.blink.duration_seconds").setValue(7)
     qapp.processEvents()
     assert spy.windows == []
+
+
+def test_알림_팝업이_나타나는_동안에도_작은_창이_뜨지_않고_끝에는_선명해진다(qapp, spy):
+    from PySide6.QtCore import QEventLoop, QTimer
+
+    popup = ReminderPopup(5)
+    popup.show_at_corner()
+    loop = QEventLoop()
+    QTimer.singleShot(400, loop.quit)
+    loop.exec()
+    popup.hide()
+    assert spy.windows == ["ReminderPopup('popup', '')"]  # 팝업 하나만 (다른 독립 창은 없다)

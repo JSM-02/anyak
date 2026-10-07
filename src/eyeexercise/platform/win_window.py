@@ -15,3 +15,10 @@ def allow_any_process_to_set_foreground() -> None:
     user32.AllowSetForegroundWindow.argtypes = [wintypes.DWORD]
     user32.AllowSetForegroundWindow.restype = wintypes.BOOL
     user32.AllowSetForegroundWindow(_ASFW_ANY)
+
+
+def set_app_user_model_id(app_id: str) -> None:
+    """작업 표시줄이 이 앱을 파이썬이 아닌 독립된 앱으로 보고 우리 아이콘을 쓰게 한다."""
+    shell32 = ctypes.WinDLL("shell32", use_last_error=True)
+    shell32.SetCurrentProcessExplicitAppUserModelID.argtypes = [wintypes.LPCWSTR]
+    shell32.SetCurrentProcessExplicitAppUserModelID(app_id)

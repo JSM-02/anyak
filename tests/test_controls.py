@@ -11,6 +11,7 @@ from PySide6.QtWidgets import QApplication, QFrame, QStyleFactory, QVBoxLayout, 
 
 from eyeexercise.core.settings import Settings
 from eyeexercise.core.settings_manager import SettingsManager
+from eyeexercise.ui import theme
 from eyeexercise.ui.controls import CONTROLS_STYLE, LabeledSlider, Segmented, Switch
 from eyeexercise.ui.settings_page import SettingsPage
 
@@ -31,7 +32,7 @@ def white_card(*widgets):
     """흰 카드 위에 컨트롤을 올린다 (설정 화면과 같은 배경)."""
     card = QFrame()
     _cards.append(card)
-    card.setStyleSheet("QFrame { background: #ffffff; }" + CONTROLS_STYLE)
+    card.setStyleSheet("QFrame { background: #ffffff; }" + theme.render(CONTROLS_STYLE))
     layout = QVBoxLayout(card)
     layout.setContentsMargins(20, 20, 20, 20)
     for widget in widgets:
@@ -84,12 +85,12 @@ def test_꺼진_스위치도_흰_카드_위에서_보인다(qapp):
     assert_visible(pixel(switch, switch.width() - 8, switch.height() // 2))
 
 
-def test_켜진_스위치는_파랑으로_보인다(qapp):
+def test_켜진_스위치는_초록으로_보인다(qapp):
     switch = Switch()
     switch.setChecked(True)
     white_card(switch)
     track = pixel(switch, 8, switch.height() // 2)  # 켜짐일 때 동그라미는 오른쪽이므로 왼쪽 끝의 트랙 색
-    assert track.name() == "#1a73e8"
+    assert track.name() == "#188038"
 
 
 def test_스위치를_누르면_바뀌고_신호를_낸다(qapp):
@@ -137,12 +138,12 @@ def test_슬라이더의_홈은_흰_카드_위에서_보인다(qapp):
     assert_visible(pixel(slider, int(slider.width() * 0.8), slider.height() // 2), minimum=50)
 
 
-def test_슬라이더의_채워진_부분은_파랑이다(qapp):
+def test_슬라이더의_채워진_부분은_초록이다(qapp):
     control = LabeledSlider(1, 120, " 분", 5)
     control.setValue(100)
     white_card(control)
     slider = control.slider
-    assert pixel(slider, int(slider.width() * 0.4), slider.height() // 2).name() == "#1a73e8"
+    assert pixel(slider, int(slider.width() * 0.4), slider.height() // 2).name() == "#188038"
 
 
 def test_비활성_슬라이더도_보인다(qapp):
@@ -247,8 +248,8 @@ def test_세_컨트롤은_기본_위젯을_쓰지_않는다(qapp):
 # ---- 슬라이더 손잡이가 잘리지 않는다 ----
 
 
-def _is_blue(color: QColor) -> bool:
-    return color.blue() > 200 and color.red() < 100  # 손잡이 테두리 파랑(#1a73e8)
+def _is_accent(color: QColor) -> bool:
+    return color.red() < 100 and color.green() > color.red() + 40 and color.green() > color.blue() + 40  # 손잡이 테두리 초록(#188038)
 
 
 def _is_white(color: QColor) -> bool:
@@ -256,15 +257,15 @@ def _is_white(color: QColor) -> bool:
 
 
 def handle_ring_distances(slider) -> tuple[int, int] | None:
-    """손잡이 가운데에서 위·아래로 테두리(파랑)까지의 거리. 위나 아래가 잘려 테두리가 없으면 None."""
+    """손잡이 가운데에서 위·아래로 테두리(초록)까지의 거리. 위나 아래가 잘려 테두리가 없으면 None."""
     image = render_on_white(slider)
     width, height = image.width(), image.height()
     cy = height // 2
     row = [QColor(image.pixel(x, cy)) for x in range(width)]
     center = None
     reach = 14  # 손잡이 속(흰색)의 지름이 14px 안팎이라 가운데에서 양쪽 테두리까지 이만큼은 본다
-    for x in range(reach, width - reach):  # 흰 속의 양옆에 파랑 테두리가 있는 자리를 찾는다
-        if _is_white(row[x]) and any(_is_blue(row[x - d]) for d in range(1, reach)) and any(_is_blue(row[x + d]) for d in range(1, reach)):
+    for x in range(reach, width - reach):  # 흰 속의 양옆에 초록 테두리가 있는 자리를 찾는다
+        if _is_white(row[x]) and any(_is_accent(row[x - d]) for d in range(1, reach)) and any(_is_accent(row[x + d]) for d in range(1, reach)):
             run_start = x
             while run_start > 0 and _is_white(row[run_start - 1]):
                 run_start -= 1
@@ -276,8 +277,8 @@ def handle_ring_distances(slider) -> tuple[int, int] | None:
                 break
     if center is None:
         return None
-    up = next((d for d in range(1, cy + 1) if _is_blue(QColor(image.pixel(center, cy - d)))), None)
-    down = next((d for d in range(1, height - cy) if _is_blue(QColor(image.pixel(center, cy + d)))), None)
+    up = next((d for d in range(1, cy + 1) if _is_accent(QColor(image.pixel(center, cy - d)))), None)
+    down = next((d for d in range(1, height - cy) if _is_accent(QColor(image.pixel(center, cy + d)))), None)
     return None if up is None or down is None else (up, down)
 
 

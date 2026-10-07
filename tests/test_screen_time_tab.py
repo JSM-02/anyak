@@ -3,7 +3,7 @@ from datetime import date, datetime, timedelta, timezone
 
 import pytest
 from fakes import FakeClock, FakeIdle
-from PySide6.QtCore import QPoint, Qt
+from PySide6.QtCore import QPoint, QPointF, Qt
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QLabel
 
@@ -75,39 +75,8 @@ def click_bar(tab, index):
     QTest.mouseClick(chart, Qt.MouseButton.LeftButton, pos=QPoint(int(rect.center().x()), int(y)))
 
 
-def table_rows(tab):
-    """표의 데이터 줄(머리·날짜 제목 제외)을 칸 순서대로 돌려준다. 예: [["14:32", "점 따라가기", "완료", "1분"], ...]"""
-    grid = tab._table._grid
-    rows: dict[int, dict[int, str]] = {}
-    for i in range(grid.count()):
-        widget = grid.itemAt(i).widget()
-        if isinstance(widget, QLabel) and widget.objectName() == "cell":
-            row, column, _, _ = grid.getItemPosition(i)
-            rows.setdefault(row, {})[column] = widget.text()
-    return [[cells[c] for c in sorted(cells)] for _, cells in sorted(rows.items())]
-
-
-def table_cells(tab, column):
-    return [row[column] for row in table_rows(tab)]
-
-
-def group_titles(tab):
-    return [lbl.text() for lbl in tab.findChildren(QLabel) if lbl.objectName() == "groupTitle"]
-
-
-def table_headers(tab):
-    return [lbl.text() for lbl in tab.findChildren(QLabel) if lbl.objectName() == "tableHead"]
-
-
-def muted_flags(tab):
-    """데이터 줄마다 연한 회색 줄인지."""
-    grid = tab._table._grid
-    flags: dict[int, bool] = {}
-    for i in range(grid.count()):
-        widget = grid.itemAt(i).widget()
-        if isinstance(widget, QLabel) and widget.objectName() == "cell":
-            flags[grid.getItemPosition(i)[0]] = bool(widget.property("muted"))
-    return [flags[r] for r in sorted(flags)]
+def timeline_days_of(tab):
+    return tab._timeline._days
 
 
 
@@ -149,11 +118,10 @@ def test_운동으로_돌아오면_운동_화면이_그대로다(qapp):
     tab.set_mode(Mode.SCREEN_TIME)
     tab.set_mode(Mode.EXERCISE)
     assert tab._kicker.text() == "완료한 운동" and exercise_count(tab) == 2
-    assert tab._section.text() == "최근 기록"
+    assert tab._section.text() == "하루 흐름"
     assert tab._chart.axis_max == 4
-    assert group_titles(tab) == ["어제", "10월 5일 (월)"]
-    assert table_cells(tab, 0) == ["12:00", "12:00"]
-    assert table_headers(tab) == ["시간", "운동", "결과", "길이"]
+    marked = [(d.title, [m.minute for m in d.marks]) for d in timeline_days_of(tab) if d.marks]
+    assert marked == [("어제", [720]), ("10월 5일 (월)", [720])]
 
 
 def test_모드를_바꿔도_기간과_위치는_유지되고_선택만_풀린다(qapp):
@@ -234,22 +202,23 @@ def test_하이라이트는_평균_가장_많은_날_운동_완료(qapp):
     assert [d.text() for d in tab._highlight_details] == ["", "수요일", ""]
 
 
-def test_목록은_최근_7일_일별_사용_시간이다(qapp):
-    tab, _, _ = make_tab(qapp, entries=[(10, 7, 9, 3600), (10, 6, 9, 1800), (10, 1, 9, 600)])
+def test_스크린_타임에서도_하루_흐름에_시간대별_사용이_보인다(qapp):
+    tab, _, _ = make_tab(qapp, entries=[(10, 7, 9, 3600), (10, 7, 10, 1800), (10, 6, 9, 1800), (10, 1, 9, 600)])
     tab.set_mode(Mode.SCREEN_TIME)
-    assert tab._section.text() == "최근 7일"
-    assert table_headers(tab) == ["날짜", "사용 시간"]
-    assert table_rows(tab) == [
-        ["오늘", "1시간"],
-        ["어제", "30분"],
-        ["10월 5일 (월)", "0분"],
-        ["10월 4일 (일)", "0분"],
-        ["10월 3일 (토)", "0분"],
-        ["10월 2일 (금)", "0분"],
-        ["10월 1일 (목)", "10분"],
-    ]
-    assert group_titles(tab) == []  # 날짜가 이미 첫 칸이라 묶음 제목이 없다
-    assert tab._more.isHidden()  # 더 보기는 운동 기록에만 있다
+    assert tab._section.text() == "하루 흐름"
+    days = timeline_days_of(tab)
+    assert [d.title for d in days][:3] == ["오늘", "어제", "10월 5일 (월)"] and len(days) == 7
+    assert days[0].hours[9] == 3600 and days[0].hours[10] == 1800
+    assert (days[0].span, days[1].span, days[2].span, days[6].span) == ("9시~10시대", "9시대", "", "9시대")
+    assert days[0].total_seconds == 5400
+    assert not tab._more.isHidden() and not tab._legend.isHidden()
+
+
+def test_하루_흐름의_마우스_설명에_사용_시간이_나온다(qapp):
+    tab, _, _ = make_tab(qapp, entries=[(10, 7, 9, 2520)])
+    chart = tab._timeline
+    assert chart.tip_at(chart.cell_rect(0, 9).center()) == "9시대 스크린 타임 42분"
+    assert chart.tip_at(chart.cell_rect(0, 7).center()) == ""
 
 
 # ---- 주기 갱신 ----

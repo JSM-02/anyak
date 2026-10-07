@@ -1,3 +1,5 @@
+import pytest
+
 from eyeexercise.core.settings import Settings, settings_from_dict, settings_to_dict
 
 
@@ -102,3 +104,24 @@ def test_소리_설정을_끄고_저장해도_유지된다():
 def test_소리_설정_타입이_잘못되면_기본값():
     assert settings_from_dict({"sound": {"enabled": "no"}}).sound.enabled is True
     assert settings_from_dict({"sound": "off"}).sound.enabled is True
+
+
+# ---- 화면 모드 ----
+
+
+def test_화면_모드_기본은_시스템_설정을_따르는_것이다():
+    assert Settings().appearance == "system"
+    assert settings_from_dict({}).appearance == "system"
+
+
+def test_화면_모드를_저장하고_다시_읽는다():
+    from eyeexercise.core.settings import settings_to_dict, with_changes
+
+    s = with_changes(Settings(), {"appearance": "dark"})
+    assert s.appearance == "dark"
+    assert settings_from_dict(settings_to_dict(s)).appearance == "dark"
+
+
+@pytest.mark.parametrize("value", ["blue", 1, None, "DARK"])
+def test_알_수_없는_화면_모드는_기본값으로_보정한다(value):
+    assert settings_from_dict({"appearance": value}).appearance == "system"

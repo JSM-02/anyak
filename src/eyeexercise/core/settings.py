@@ -40,6 +40,9 @@ class SoundSettings:
     enabled: bool = True  # 운동 중 음성 안내(음성이 없으면 알림음)
 
 
+APPEARANCES = ("system", "light", "dark")  # 화면 모드: Windows 설정 따르기 / 라이트 / 다크
+
+
 @dataclass(frozen=True)
 class Settings:
     interval_minutes: int = 20
@@ -49,6 +52,7 @@ class Settings:
     exercises: ExercisesSettings = field(default_factory=ExercisesSettings)
     show_main_window_on_start: bool = False
     sound: SoundSettings = field(default_factory=SoundSettings)
+    appearance: str = "system"
 
 
 def _as_dict(value: Any) -> dict:
@@ -69,6 +73,10 @@ def _int(value: Any, default: int, bounds: tuple[int, int]) -> int:
 
 def _speed(value: Any, default: str) -> str:
     return value if value in SPEEDS else default
+
+
+def _appearance(value: Any, default: str) -> str:
+    return value if value in APPEARANCES else default
 
 
 def settings_from_dict(data: Any) -> Settings:
@@ -110,6 +118,7 @@ def settings_from_dict(data: Any) -> Settings:
         ),
         show_main_window_on_start=_bool(raw.get("show_main_window_on_start"), d.show_main_window_on_start),
         sound=SoundSettings(enabled=_bool(raw_sound.get("enabled"), d.sound.enabled)),
+        appearance=_appearance(raw.get("appearance"), d.appearance),
     )
 
 
@@ -133,6 +142,7 @@ def settings_to_dict(settings: Settings) -> dict:
         },
         "show_main_window_on_start": settings.show_main_window_on_start,
         "sound": {"enabled": settings.sound.enabled},
+        "appearance": settings.appearance,
     }
 
 

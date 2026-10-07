@@ -12,9 +12,9 @@ from enum import Enum
 from PySide6.QtCore import QPointF, QRectF, Qt, QTimer, Signal
 from PySide6.QtGui import QColor, QFont, QMouseEvent, QPainter, QPen
 from PySide6.QtWidgets import (
+    QToolTip,
     QButtonGroup,
     QFrame,
-    QGridLayout,
     QHBoxLayout,
     QLabel,
     QLayout,
@@ -45,15 +45,15 @@ from eyeexercise.core.stats import (
     previous_label,
     range_caption,
     range_title,
-    recent_groups,
     shift_anchor,
     summarize_range,
     summarize_usage,
-    usage_daily_rows,
+    timeline_days,
     usage_highlights_with_compare,
     usage_parts,
 )
 from eyeexercise.core.usage import UsageLog
+from eyeexercise.ui import theme
 
 _BLUE = QColor("#1a73e8")
 _GRAY = QColor("#9aa0a6")
@@ -62,7 +62,6 @@ _PURPLE = QColor("#8e5bd8")
 # 최근 기록의 색 원: 완료는 운동 종류별, 건너뜀·미룸은 결과별
 _EXERCISE_COLORS = {"blink": _BLUE, "dot_follow": _PURPLE}
 _RESULT_COLORS = {"skipped": _GRAY, "snoozed": _ORANGE}
-_LEGEND = (("깜빡임", _BLUE), ("점 따라가기", _PURPLE), ("건너뜀", _GRAY), ("미룸", _ORANGE))
 
 
 def marker_color(kind: str, exercise: str) -> QColor:
@@ -73,8 +72,8 @@ def marker_color(kind: str, exercise: str) -> QColor:
 
 
 _PERIOD_LABELS = ((Period.DAY, "일"), (Period.WEEK, "주"), (Period.MONTH, "월"))
-RECENT_COLLAPSED = 10  # 처음에 보여 주는 최근 기록 줄 수
-RECENT_EXPANDED = 100  # '더 보기'를 눌렀을 때
+RECENT_COLLAPSED = 7  # 처음에 보여 주는 하루 타임라인 일수
+RECENT_EXPANDED = 30  # '더 보기'를 눌렀을 때
 LIVE_REFRESH_MS = 30_000  # 스크린 타임을 보는 동안 숫자가 따라가도록 새로 그리는 간격
 
 
@@ -86,39 +85,34 @@ class Mode(Enum):
 _MODE_LABELS = ((Mode.EXERCISE, "운동"), (Mode.SCREEN_TIME, "스크린 타임"))
 
 _STYLE = """
-#records, #recordsContent { background: #f5f5f7; }
+#records, #recordsContent { background: $bg; }
 #records QLabel { background: transparent; }
-#pageTitle { font-size: 24px; font-weight: bold; }
-#segment { background: #e6e6ea; border-radius: 7px; }
+#pageTitle { font-size: $fs_title; font-weight: bold; }
+#segment { background: $hover; border-radius: 7px; }
 #segment QPushButton {
-    background: transparent; border: none; border-radius: 5px; padding: 5px 18px; color: #3c4043;
+    background: transparent; border: none; border-radius: 5px; padding: 5px 18px; color: $text_body;
 }
-#segment QPushButton:checked { background: #ffffff; color: #202124; font-weight: bold; }
-#nav QPushButton { background: transparent; border: none; font-size: 20px; color: #1a73e8; padding: 0 10px; }
-#nav QPushButton:disabled { color: #c4c7cc; }
-#navTitle { font-size: 14px; font-weight: bold; min-width: 80px; }
-#card { background: #ffffff; border: 1px solid #e4e4e8; border-radius: 8px; }
-#kicker { font-size: 13px; color: #5f6368; font-weight: bold; }
-#caption { font-size: 13px; color: #5f6368; }
-#cardLabel { font-size: 12px; color: #5f6368; }
-#cardValue { font-size: 22px; font-weight: bold; }
-#cardDetail { font-size: 12px; color: #5f6368; }
-#cardCompare { font-size: 12px; color: #3c4043; padding-top: 4px; }
-#todayTitle { font-size: 12px; color: #5f6368; font-weight: bold; }
-#todayValue { font-size: 26px; font-weight: bold; }
-#todayLine { font-size: 13px; color: #3c4043; }
-#todayLineSub { font-size: 12px; color: #80868b; }
-#compareLine { font-size: 13px; color: #3c4043; }
-#compareLineSub { font-size: 12px; color: #80868b; }
-#legendItem { font-size: 12px; color: #5f6368; padding: 0 6px; }
-#sectionTitle { font-size: 16px; font-weight: bold; }
-#moreButton { background: transparent; border: none; color: #1a73e8; padding: 2px 6px; }
+#segment QPushButton:checked { background: $surface; color: $text; font-weight: bold; }
+#nav QPushButton { background: transparent; border: none; font-size: $fs_icon; color: $accent; padding: 0 10px; }
+#nav QPushButton:disabled { color: $disabled; }
+#navTitle { font-size: $fs_body; font-weight: bold; min-width: 80px; }
+#card { background: $surface; border: 1px solid $border; border-radius: 8px; }
+#kicker { font-size: $fs_small; color: $text_secondary; font-weight: bold; }
+#caption { font-size: $fs_small; color: $text_secondary; }
+#cardLabel { font-size: $fs_caption; color: $text_secondary; }
+#cardValue { font-size: $fs_title; font-weight: bold; }
+#cardDetail { font-size: $fs_caption; color: $text_secondary; }
+#cardCompare { font-size: $fs_caption; color: $text_body; padding-top: 4px; }
+#todayTitle { font-size: $fs_caption; color: $text_secondary; font-weight: bold; }
+#todayValue { font-size: $fs_stat; font-weight: bold; }
+#todayLine { font-size: $fs_small; color: $text_body; }
+#todayLineSub { font-size: $fs_caption; color: $text_muted; }
+#compareLine { font-size: $fs_small; color: $text_body; }
+#compareLineSub { font-size: $fs_caption; color: $text_muted; }
+#legendItem { font-size: $fs_caption; color: $text_secondary; padding: 0 6px; }
+#sectionTitle { font-size: $fs_heading; font-weight: bold; }
+#moreButton { background: transparent; border: none; color: $accent; padding: 2px 6px; }
 #moreButton:hover { text-decoration: underline; }
-#tableHead { font-size: 12px; color: #80868b; padding: 6px 0; }
-#groupTitle { font-size: 13px; font-weight: bold; color: #202124; padding: 12px 0 4px 0; }
-#cell { font-size: 14px; padding: 7px 0; }
-#cell[muted="true"] { color: #9aa0a6; }
-#empty { color: #80868b; font-size: 13px; }
 """
 
 
@@ -204,14 +198,14 @@ class BarChart(QWidget):
         axis = self._axis
 
         small = QFont(self.font())
-        small.setPixelSize(11)
+        small.setPixelSize(11)  # 차트 눈금·라벨 전용 크기
         painter.setFont(small)
-        grid = QPen(QColor("#e0e0e5"), 1)
+        grid = QPen(theme.color("grid"), 1)
         for value in (0, axis / 2, axis):
             y = plot.bottom() - plot.height() * value / axis
             painter.setPen(grid)
             painter.drawLine(QPointF(plot.left(), y), QPointF(plot.right(), y))
-            painter.setPen(QColor("#80868b"))
+            painter.setPen(theme.color("text_muted"))
             painter.drawText(
                 QRectF(plot.right() + 4, y - 8, self._RIGHT - 4, 16),
                 Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
@@ -222,7 +216,7 @@ class BarChart(QWidget):
             painter.end()
             return
         if not any(self._values):
-            painter.setPen(QColor("#80868b"))
+            painter.setPen(theme.color("text_muted"))
             painter.drawText(plot, Qt.AlignmentFlag.AlignCenter, self._empty_text)
 
         slot = plot.width() / len(self._buckets)
@@ -232,7 +226,7 @@ class BarChart(QWidget):
                 font = QFont(small)
                 font.setBold(b.is_current)
                 painter.setFont(font)
-                painter.setPen(_BLUE if b.is_current else QColor("#80868b"))
+                painter.setPen(theme.color("accent") if b.is_current else theme.color("text_muted"))
                 painter.drawText(
                     QRectF(plot.left() + slot * i - 8, plot.bottom() + 4, slot + 16, 16),
                     Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignTop,
@@ -240,7 +234,7 @@ class BarChart(QWidget):
                 )
             if b.is_future or self._values[i] <= 0:
                 continue
-            color = QColor(_BLUE)
+            color = theme.color("accent")
             if dim and i != self._selected:
                 color.setAlpha(90)  # 선택하지 않은 막대는 흐리게
             painter.setPen(Qt.PenStyle.NoPen)
@@ -273,91 +267,176 @@ def _segmented(labels: Iterable[str]) -> tuple[QFrame, list[QPushButton], QButto
     return frame, buttons, group
 
 
-@dataclass(frozen=True)
-class _TableRow:
-    cells: Sequence[str]
-    muted: bool = False  # 건너뜀·미룸처럼 덜 중요한 줄은 연한 회색으로 보인다
-    marker: QColor | None = None  # 줄 앞의 색 원. 표 전체가 색 원 칸을 가질 때만 쓴다
-
-
 def arrow_line(trend: str, line: str) -> str:
     """비교 문구 앞에 ▲▼– 를 붙인다. "기록이 없어요"처럼 비교할 수 없을 때는 붙이지 않는다."""
     return line if "기록이 없어요" in line else f"{TREND_SYMBOLS[trend]} {line}"
 
 
-class _Table(QWidget):
-    """날짜별로 묶을 수 있는 표. 모든 줄이 한 격자를 써서 칸이 줄마다 가지런하다."""
+class TimelineChart(QWidget):
+    """하루 흐름. 날짜마다 한 줄, 시간대(1시간)마다 한 칸인 격자다.
+
+    칸의 초록이 진할수록 그 시간대에 스크린 타임이 길고, 칸 안의 숫자는 그 시간대에 완료한 운동 횟수다.
+    건너뜀(회색)·미룸(주황)은 칸 귀퉁이의 작은 점으로 알린다. 칸에 마우스를 올리면 자세한 내용이 뜬다.
+    """
+
+    _LABEL_W = 92  # 왼쪽 날짜 칸
+    _INFO_W = 176  # 오른쪽 요약 칸
+    _HEAD_H = 24  # 위쪽 시간 글자
+    _ROW_H = 36
+    _CELL_H = 26
+    _GAP = 14  # 칸 사이 간격
+    _CELL_GAP = 2  # 격자 칸 사이 틈
+    _DEFAULT_START = 6  # 가로축은 보통 6시부터 자정까지. 더 이른 기록이 있으면 그 시각부터
+    _TICK_HOURS = 3  # 시각 글자는 3시간마다
 
     def __init__(self) -> None:
         super().__init__()
-        self._grid = QGridLayout(self)
-        self._grid.setContentsMargins(0, 0, 0, 0)
-        self._grid.setHorizontalSpacing(16)
-        self._grid.setVerticalSpacing(0)
-        self._columns = 0
+        self._days: list = []
+        self._start_hour = self._DEFAULT_START
+        self._empty_text = "아직 기록이 없어요"
+        self.setMouseTracking(True)
+        self.setMinimumWidth(420)
+        self._fit_height()
 
-    def clear(self) -> None:
-        while self._grid.count():
-            item = self._grid.takeAt(0)
-            widget = item.widget()
-            if widget is not None:
-                widget.hide()  # deleteLater만으로는 이벤트 루프가 돌 때까지 화면에 남아 새 줄과 겹쳐 보인다
-                widget.setParent(None)
-                widget.deleteLater()
-        for column in range(self._columns):
-            self._grid.setColumnStretch(column, 0)
-            self._grid.setColumnMinimumWidth(column, 0)
+    def set_days(self, days: Sequence) -> None:
+        self._days = list(days)
+        self._start_hour = self._axis_start()
+        self._fit_height()
+        self.update()
 
-    def set_content(
-        self,
-        headers: Sequence[str],
-        stretches: Sequence[int],
-        groups: Sequence[tuple[str | None, Sequence[_TableRow]]],
-        markers: bool = False,
-    ) -> None:
-        """markers가 True면 맨 앞에 색 원 칸을 하나 더 둔다. 머리글은 비워 두고 칸 너비는 원에 맞춘다."""
-        self.clear()
-        offset = 1 if markers else 0
-        self._columns = len(headers) + offset
-        if markers:
-            self._grid.setColumnMinimumWidth(0, 18)
-        for column, (header, stretch) in enumerate(zip(headers, stretches, strict=True), start=offset):
-            self._grid.setColumnStretch(column, stretch)
-            label = QLabel(header)
-            label.setObjectName("tableHead")
-            self._grid.addWidget(label, 0, column)
-        row = 1
-        self._add_line(row)
-        row += 1
-        for title, rows in groups:
-            if title is not None:
-                label = QLabel(title)
-                label.setObjectName("groupTitle")
-                self._grid.addWidget(label, row, 0, 1, self._columns)
-                row += 1
-            for index, table_row in enumerate(rows):
-                if index or title is None and row > 2:
-                    self._add_line(row, light=True)
-                    row += 1
-                if markers and table_row.marker is not None:
-                    dot = QLabel("●")
-                    dot.setObjectName("dot")
-                    dot.setProperty("marker", table_row.marker.name())
-                    dot.setStyleSheet(f"color: {table_row.marker.name()}; font-size: 12px;")
-                    dot.setAlignment(Qt.AlignmentFlag.AlignCenter)
-                    self._grid.addWidget(dot, row, 0)
-                for column, text in enumerate(table_row.cells, start=offset):
-                    cell = QLabel(text)
-                    cell.setObjectName("cell")
-                    cell.setProperty("muted", table_row.muted)
-                    self._grid.addWidget(cell, row, column)
-                row += 1
+    def _axis_start(self) -> int:
+        """가로축이 시작하는 시(時). 낮 시간을 넓게 보이려고 기본 6시부터이고, 더 이른 기록이 있으면 그 시각부터 보인다."""
+        earliest = self._DEFAULT_START
+        for day in self._days:
+            used = [h for h, seconds in enumerate(day.hours) if seconds > 0]
+            if used:
+                earliest = min(earliest, used[0])
+            if day.marks:
+                earliest = min(earliest, int(day.marks[0].minute // 60))
+        return earliest - earliest % self._TICK_HOURS  # 시각 글자와 맞게 3의 배수로 내린다
 
-    def _add_line(self, row: int, light: bool = False) -> None:
-        line = QFrame()
-        line.setFixedHeight(1)
-        line.setStyleSheet("background: #f0f0f3;" if light else "background: #e4e4e8;")
-        self._grid.addWidget(line, row, 0, 1, max(1, self._columns))
+    def _fit_height(self) -> None:
+        self.setFixedHeight(self._HEAD_H + max(1, len(self._days)) * self._ROW_H + 4)
+
+    def grid_rect(self) -> QRectF:
+        """격자 전체(날짜 줄들이 공통으로 쓰는 가로 범위)."""
+        left = self._LABEL_W + self._GAP
+        right = self.width() - self._INFO_W - self._GAP
+        return QRectF(left, self._HEAD_H, max(1.0, right - left), self._ROW_H * max(1, len(self._days)))
+
+    def cell_rect(self, row: int, hour: int) -> QRectF:
+        """row 줄의 hour시 칸. 축 밖의 시각이면 가장자리 밖으로 나간 칸을 돌려준다."""
+        grid = self.grid_rect()
+        width = grid.width() / (24 - self._start_hour)
+        left = grid.left() + width * (hour - self._start_hour)
+        top = grid.top() + row * self._ROW_H + (self._ROW_H - self._CELL_H) / 2
+        half = self._CELL_GAP / 2
+        return QRectF(left + half, top, width - self._CELL_GAP, self._CELL_H)
+
+    def cell_at(self, pos: QPointF) -> tuple[int, int] | None:
+        """pos(위젯 좌표)가 놓인 (줄, 시). 칸이 아니면 None."""
+        grid = self.grid_rect()
+        row = int((pos.y() - grid.top()) // self._ROW_H)
+        if not (0 <= row < len(self._days) and grid.left() <= pos.x() < grid.right()):
+            return None
+        hour = self._start_hour + int((pos.x() - grid.left()) / grid.width() * (24 - self._start_hour))
+        return row, min(23, hour)
+
+    def tip_at(self, pos: QPointF) -> str:
+        """pos에 보여 줄 설명. 칸에 스크린 타임이나 운동 기록이 있으면 여러 줄로, 없으면 빈 문자열."""
+        cell = self.cell_at(pos)
+        if cell is None:
+            return ""
+        row, hour = cell
+        day = self._days[row]
+        lines = []
+        if day.hours[hour] > 0:
+            lines.append(f"{hour}시대 스크린 타임 {format_usage(day.hours[hour])}")
+        marks = day.hour_marks(hour)
+        if marks and not lines:
+            lines.append(f"{hour}시대")
+        lines.extend(m.tip for m in marks)
+        return "\n".join(lines)
+
+    def mouseMoveEvent(self, event: QMouseEvent) -> None:
+        tip = self.tip_at(event.position())
+        if tip:
+            QToolTip.showText(event.globalPosition().toPoint(), tip, self)
+        else:
+            QToolTip.hideText()
+
+    def paintEvent(self, _event) -> None:
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        small = QFont(self.font())
+        small.setPixelSize(theme.FONT_SIZES["fs_caption"])
+        painter.setFont(small)
+        if not self._days or all(d.is_empty for d in self._days):
+            painter.setPen(theme.color("text_muted"))
+            painter.drawText(self.rect(), Qt.AlignmentFlag.AlignCenter, self._empty_text)
+            painter.end()
+            return
+
+        # 위쪽 시각 글자: 3시간마다, 그 시간대 칸 위에
+        painter.setPen(theme.color("text_muted"))
+        for hour in range(self._start_hour, 24, self._TICK_HOURS):
+            cell = self.cell_rect(0, hour)
+            painter.drawText(QRectF(cell.left() - 12, 0, cell.width() + 24, self._HEAD_H - 4), Qt.AlignmentFlag.AlignCenter, f"{hour}시")
+
+        bold = QFont(small)
+        bold.setBold(True)
+        for row, day in enumerate(self._days):
+            top = self._HEAD_H + row * self._ROW_H
+            painter.setFont(small)
+            painter.setPen(theme.color("text") if row == 0 else theme.color("text_body"))
+            painter.drawText(
+                QRectF(0, top, self._LABEL_W, self._ROW_H),
+                Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
+                day.title,
+            )
+            for hour in range(self._start_hour, 24):
+                rect = self.cell_rect(row, hour)
+                seconds = day.hours[hour]
+                marks = day.hour_marks(hour)
+                painter.setPen(Qt.PenStyle.NoPen)
+                if seconds > 0:
+                    fill = theme.color("accent")
+                    strength = min(1.0, seconds / 3600)
+                    fill.setAlpha(int(55 + 200 * strength))
+                else:
+                    fill, strength = theme.color("chip"), 0.0
+                painter.setBrush(fill)
+                painter.drawRoundedRect(rect, 4, 4)
+                done = sum(1 for m in marks if m.kind == "completed")
+                if done:  # 완료한 운동 횟수. 진한 칸에서는 흰 글자가 읽힌다
+                    painter.setFont(bold)
+                    painter.setPen(theme.color("on_accent") if strength > 0.55 else theme.color("text"))
+                    painter.drawText(rect, Qt.AlignmentFlag.AlignCenter, str(done))
+                    painter.setFont(small)
+                dots = [marker_color(kind, "") for kind in ("skipped", "snoozed") if any(m.kind == kind for m in marks)]
+                painter.setPen(QPen(theme.color("surface"), 1))
+                for i, color in enumerate(dots):  # 건너뜀·미룸: 칸 오른쪽 위 귀퉁이의 작은 점
+                    painter.setBrush(color)
+                    painter.drawEllipse(QPointF(rect.right() - 4 - i * 7, rect.top() + 4), 2.8, 2.8)
+            # 오른쪽 요약
+            info = QRectF(self.width() - self._INFO_W, top, self._INFO_W, self._ROW_H)
+            if day.is_empty:
+                painter.setPen(theme.color("text_faint"))
+                painter.drawText(info, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, "기록 없음")
+                continue
+            has_usage = day.total_seconds >= 60
+            first = f"{day.span} · {format_usage(day.total_seconds)}" if has_usage else "스크린 타임 기록 없음"
+            painter.setPen(theme.color("text_body") if has_usage else theme.color("text_faint"))
+            painter.drawText(
+                QRectF(info.left(), top + 2, info.width(), 16), Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, first
+            )
+            painter.setPen(theme.color("text_muted"))
+            painter.drawText(
+                QRectF(info.left(), top + 18, info.width(), 16),
+                Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
+                f"운동 {day.completed}회",
+            )
+        painter.end()
 
 
 class RecordsTab(QWidget):
@@ -382,7 +461,8 @@ class RecordsTab(QWidget):
 
         self.setObjectName("records")
         self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground)
-        self.setStyleSheet(_STYLE)
+        theme.bind(self, _STYLE)
+        theme.on_changed(self.refresh)  # 숫자 글자색처럼 문장에 박힌 색도 새 테마로 다시 만든다
 
         # 보는 것 (운동 / 스크린 타임)
         mode_frame, mode_buttons, self._mode_group = _segmented(text for _, text in _MODE_LABELS)
@@ -490,27 +570,29 @@ class RecordsTab(QWidget):
             today_row.addWidget(card, stretch=1)
             self._today_cards[key] = [value_label, line, sub]
 
-        # 표 (운동: 최근 기록 / 스크린 타임: 최근 7일)
+        # 하루 타임라인 (운동·스크린 타임 두 모드 공통)
         self._section = QLabel()
         self._section.setObjectName("sectionTitle")
         self._legend = QWidget()
+        self._legend_items: list[QLabel] = []
         legend_layout = QHBoxLayout(self._legend)
         legend_layout.setContentsMargins(8, 0, 0, 0)
         legend_layout.setSpacing(0)
-        for text, color in _LEGEND:
-            item = QLabel(f'<span style="color:{color.name()};">●</span> {text}')
+        for html in self._legend_html():
+            item = QLabel(html)
             item.setObjectName("legendItem")
             item.setTextFormat(Qt.TextFormat.RichText)
             legend_layout.addWidget(item)
+            self._legend_items.append(item)
         self._more = QPushButton("더 보기")
         self._more.setObjectName("moreButton")
         self._more.setCursor(Qt.CursorShape.PointingHandCursor)
         self._more.clicked.connect(self._toggle_expanded)
-        self._table = _Table()
+        self._timeline = TimelineChart()
         table_card = _card()
         table_layout = QVBoxLayout(table_card)
         table_layout.setContentsMargins(20, 8, 20, 12)
-        table_layout.addWidget(self._table)
+        table_layout.addWidget(self._timeline)
 
         content = QWidget()
         content.setObjectName("recordsContent")
@@ -566,6 +648,17 @@ class RecordsTab(QWidget):
         self._live.timeout.connect(self._on_live_tick)
 
         self.refresh()
+
+    @staticmethod
+    def _legend_html() -> list[str]:
+        """하루 흐름 범례: 칸 색(스크린 타임), 숫자(완료 횟수), 귀퉁이 점(건너뜀·미룸)."""
+        accent = theme.palette().accent
+        return [
+            f'<span style="color:{accent};">▬</span> 스크린 타임 (진할수록 오래)',
+            f'<b>3</b> 완료한 운동 횟수',
+            f'<span style="color:{_GRAY.name()};">●</span> 건너뜀',
+            f'<span style="color:{_ORANGE.name()};">●</span> 미룸',
+        ]
 
     # ---- 상태 ----
 
@@ -692,19 +785,17 @@ class RecordsTab(QWidget):
         self._set_compare(None if selected >= 0 else compare_exercise_period(self._period, self._anchor, events, now, self._tz))
         self._set_highlights(highlights_with_compare(self._period, summary, previous, label))
 
-        self._section.setText("최근 기록")
-        has_more = len(events) > RECENT_COLLAPSED
-        self._more.setVisible(has_more)
+        self._draw_timeline(events, self._usage(), now)
+
+    def _draw_timeline(self, events, usage: UsageLog, now) -> None:
+        """운동·스크린 타임 두 모드가 같은 하루 타임라인을 보여 준다."""
+        self._section.setText("하루 흐름")
+        for item, html in zip(self._legend_items, self._legend_html(), strict=True):
+            item.setText(html)  # 테마가 바뀌면 색도 따라간다
+        self._more.setVisible(True)
         self._more.setText("접기" if self._expanded else "더 보기")
-        groups = []
-        for group in recent_groups(events, now, RECENT_EXPANDED if self._expanded else RECENT_COLLAPSED, self._tz):
-            rows = [
-                _TableRow((r.clock, r.name, r.result, r.length), muted=r.kind != "completed", marker=marker_color(r.kind, r.exercise))
-                for r in group.rows
-            ]
-            groups.append((group.title, rows))
         self._legend.setVisible(True)
-        self._fill_table(("시간", "운동", "결과", "길이"), (1, 3, 2, 2), groups, "아직 기록이 없어요", markers=True)
+        self._timeline.set_days(timeline_days(events, usage, now, RECENT_EXPANDED if self._expanded else RECENT_COLLAPSED, self._tz))
 
     def _draw_screen_time(self, exercise_buckets, exercise_summary, usage: UsageLog, now, today, previous_exercise, previous_anchor, label) -> None:
         usage_buckets = build_usage_buckets(self._period, self._anchor, usage, now, self._tz)
@@ -731,11 +822,7 @@ class RecordsTab(QWidget):
             usage_highlights_with_compare(self._period, usage_summary, exercise_summary, previous_usage, previous_exercise, label)
         )
 
-        self._section.setText("최근 7일")
-        self._more.setVisible(False)
-        self._legend.setVisible(False)
-        rows = [_TableRow((name, format_usage(secs))) for name, secs in usage_daily_rows(usage, today)]
-        self._fill_table(("날짜", "사용 시간"), (3, 2), [(None, rows)], "아직 기록이 없어요")
+        self._draw_timeline(list(self._events()), usage, now)
 
     def _set_highlights(self, cards) -> None:
         for label, value, detail, compare, card in zip(
@@ -755,19 +842,8 @@ class RecordsTab(QWidget):
         """큰 숫자 + 작은 단위. 예: (5, 시간) (12, 분) → "5시간 12분"."""
         self._number.setText(
             "".join(
-                f'<span style="font-size:42px; font-weight:600; color:#202124;">{number}</span>'
-                f'<span style="font-size:17px; color:#5f6368;"> {unit}&nbsp;</span>'
+                f'<span style="font-size:{theme.FONT_SIZES["fs_display"]}px; font-weight:600; color:{theme.palette().text};">{number}</span>'
+                f'<span style="font-size:{theme.FONT_SIZES["fs_heading"]}px; color:{theme.palette().text_secondary};"> {unit}&nbsp;</span>'
                 for number, unit in parts
             )
         )
-
-    def _fill_table(self, headers, stretches, groups, empty_text: str, markers: bool = False) -> None:
-        if any(rows for _, rows in groups):
-            self._table.set_content(headers, stretches, groups, markers)
-            return
-        self._table.clear()
-        empty = QLabel(empty_text)
-        empty.setObjectName("empty")
-        empty.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        empty.setContentsMargins(0, 24, 0, 24)
-        self._table._grid.addWidget(empty, 0, 0)  # noqa: SLF001 표 안에 안내 문구를 직접 놓는다

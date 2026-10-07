@@ -2,7 +2,7 @@ from datetime import date, datetime, timedelta, timezone
 
 import pytest
 from fakes import FakeClock, FakeIdle
-from PySide6.QtCore import QPoint, Qt
+from PySide6.QtCore import QPoint, QPointF, Qt
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QLabel
 
@@ -58,43 +58,18 @@ def count_in_header(tab):
     return int(re.search(r">(\d+)</span>", number_text(tab)).group(1))
 
 
-def table_rows(tab):
-    """표의 데이터 줄(머리·날짜 제목 제외)을 칸 순서대로 돌려준다. 예: [["14:32", "점 따라가기", "완료", "1분"], ...]"""
-    grid = tab._table._grid
-    rows: dict[int, dict[int, str]] = {}
-    for i in range(grid.count()):
-        widget = grid.itemAt(i).widget()
-        if isinstance(widget, QLabel) and widget.objectName() == "cell":
-            row, column, _, _ = grid.getItemPosition(i)
-            rows.setdefault(row, {})[column] = widget.text()
-    return [[cells[c] for c in sorted(cells)] for _, cells in sorted(rows.items())]
+def day_marks(tab):
+    """타임라인의 날짜 줄마다 (제목, 점 설명 목록). 기록 없는 날도 한 줄이다."""
+    return [(d.title, [m.tip for m in d.marks]) for d in tab._timeline._days]
 
 
-def table_cells(tab, column):
-    return [row[column] for row in table_rows(tab)]
+def marked_days(tab):
+    return [(title, tips) for title, tips in day_marks(tab) if tips]
 
 
-def group_titles(tab):
-    return [lbl.text() for lbl in tab.findChildren(QLabel) if lbl.objectName() == "groupTitle"]
-
-
-def table_headers(tab):
-    return [lbl.text() for lbl in tab.findChildren(QLabel) if lbl.objectName() == "tableHead"]
-
-
-def muted_flags(tab):
-    """데이터 줄마다 연한 회색 줄인지."""
-    grid = tab._table._grid
-    flags: dict[int, bool] = {}
-    for i in range(grid.count()):
-        widget = grid.itemAt(i).widget()
-        if isinstance(widget, QLabel) and widget.objectName() == "cell":
-            flags[grid.getItemPosition(i)[0]] = bool(widget.property("muted"))
-    return [flags[r] for r in sorted(flags)]
-
-
-def row_times(tab):
-    return table_cells(tab, 0)
+def clocks(tab):
+    """점의 시각을 최신순으로 모은다. 예: ["14:00", "09:00", "12:00"]"""
+    return [tip[:5] for d in tab._timeline._days for tip in reversed([m.tip for m in d.marks])]
 
 
 def click_bar(tab, index):
@@ -114,7 +89,7 @@ def test_기록이_없어도_정상적으로_보인다(qapp):
     assert tab._nav_title.text() == "이번 주"
     assert tab._caption.text() == "10월 5일 – 10월 11일"
     assert tab._chart.axis_max == 4
-    assert [lbl.text() for lbl in tab.findChildren(QLabel) if lbl.objectName() == "empty"] == ["아직 기록이 없어요"]
+    assert tab._timeline._empty_text == "아직 기록이 없어요" and all(d.is_empty for d in tab._timeline._days)
     assert [v.text() for v in tab._highlight_values] == ["0.0회", "0초", "0회"]
 
 
@@ -287,71 +262,119 @@ def test_막대_위치로_번호를_찾는다(qapp):
     assert BarChart().index_at(10) == -1  # 데이터가 없을 때
 
 
-# ---- 최근 기록 ----
+# ---- 하루 타임라인 (최근 기록) ----
 
 
-def test_최근_기록은_최신순으로_보인다(qapp):
+def test_하루_흐름은_오늘부터_날짜별_한_줄이다(qapp):
     events = [done(at(10, 7, 9)), done(at(10, 7, 14)), HistoryEvent(at(10, 6, 12), "skipped")]
     tab, _ = make_tab(qapp, events)
-    assert row_times(tab) == ["14:00", "09:00", "12:00"]
-    assert group_titles(tab) == ["오늘", "어제"]
+    assert tab._section.text() == "하루 흐름"
+    titles = [t for t, _ in day_marks(tab)]
+    assert len(titles) == RECENT_COLLAPSED == 7
+    assert titles[:2] == ["오늘", "어제"]
+    assert marked_days(tab) == [("오늘", ["09:00 깜빡임 완료 · 1분 6초", "14:00 깜빡임 완료 · 1분 6초"]), ("어제", ["12:00 건너뜀"])]
+    assert clocks(tab) == ["14:00", "09:00", "12:00"]
 
 
-def test_최근_기록은_처음에_10줄만_보인다(qapp):
-    events = [done(at(10, 7, 0, m)) for m in range(0, 59)] + [done(at(10, 6, 12, m)) for m in range(40)]
-    tab, _ = make_tab(qapp, events)
-    assert len(row_times(tab)) == RECENT_COLLAPSED == 10
-    assert row_times(tab)[0] == "00:58"  # 가장 최근 기록부터
+def test_기록이_없는_날도_한_줄을_차지한다(qapp):
+    tab, _ = make_tab(qapp, [done(at(10, 7, 9))])
+    assert len(day_marks(tab)) == 7 and len(marked_days(tab)) == 1
 
 
-def test_더_보기를_누르면_펼쳐지고_접기로_다시_접는다(qapp):
-    events = [done(at(10, 7, 0, m)) for m in range(0, 59)] + [done(at(10, 6, 12, m)) for m in range(40)]
-    tab, _ = make_tab(qapp, events)
+def test_더_보기를_누르면_30일로_펼쳐지고_접기로_다시_접는다(qapp):
+    tab, _ = make_tab(qapp, [done(at(10, 7, 9))])
     assert not tab._more.isHidden() and tab._more.text() == "더 보기"
     tab._more.click()
-    assert tab._more.text() == "접기" and len(row_times(tab)) == 99  # 최대 RECENT_EXPANDED(100)줄
-    assert group_titles(tab) == ["오늘", "어제"]
+    assert tab._more.text() == "접기" and len(day_marks(tab)) == RECENT_EXPANDED == 30
     tab._more.click()
-    assert tab._more.text() == "더 보기" and len(row_times(tab)) == RECENT_COLLAPSED
+    assert tab._more.text() == "더 보기" and len(day_marks(tab)) == RECENT_COLLAPSED
 
 
-def test_펼친_줄_수에도_상한이_있다(qapp):
-    events = [done(at(10, 7, h, m)) for h in range(24) for m in range(0, 60, 10)]  # 144건
-    tab, _ = make_tab(qapp, events)
+def test_타임라인의_높이는_줄_수를_따라간다(qapp):
+    tab, _ = make_tab(qapp, [done(at(10, 7, 9))])
+    short = tab._timeline.height()
     tab._more.click()
-    assert len(row_times(tab)) == RECENT_EXPANDED
+    assert tab._timeline.height() > short
 
 
-def test_기록이_10개_이하면_더_보기_버튼이_없다(qapp):
-    tab, _ = make_tab(qapp, [done(at(10, 7, h)) for h in range(10)])
-    assert tab._more.isHidden()
-    tab, _ = make_tab(qapp, [done(at(10, 7, h)) for h in range(11)])
-    assert not tab._more.isHidden()
+def test_칸은_시간대에_맞는_가로_위치에_있다(qapp):
+    tab, _ = make_tab(qapp, [done(at(10, 7, 14)), done(at(10, 6, 12, 0))])
+    chart = tab._timeline
+    grid = chart.grid_rect()
+    assert chart._start_hour == 6  # 가로축은 6시부터 자정까지
+    assert chart.cell_rect(0, 6).left() == pytest.approx(grid.left() + chart._CELL_GAP / 2)
+    assert chart.cell_rect(0, 23).right() == pytest.approx(grid.right() - chart._CELL_GAP / 2)
+    assert chart.cell_rect(0, 15).left() - chart.cell_rect(0, 14).left() == pytest.approx(grid.width() / 18)  # 칸 너비는 모두 같다
+    assert chart.cell_rect(1, 12).left() == pytest.approx(chart.cell_rect(0, 12).left())  # 줄이 달라도 같은 시각은 같은 세로 줄
+    assert chart.cell_rect(1, 12).top() > chart.cell_rect(0, 12).top()  # 어제는 오늘 아래 줄
 
 
-def test_표_머리와_칸은_시간_운동_결과_길이다(qapp):
-    tab, _ = make_tab(qapp, [done(at(10, 7, 14, 32), "dot_follow", 60), done(at(10, 7, 14, 4), "blink", 66)])
-    assert table_headers(tab) == ["시간", "운동", "결과", "길이"]
-    assert table_rows(tab) == [["14:32", "점 따라가기", "완료", "1분"], ["14:04", "깜빡임", "완료", "1분 6초"]]
-
-
-def test_건너뜀과_미룸은_연한_회색_줄이고_완료는_또렷하다(qapp):
-    events = [done(at(10, 7, 14)), HistoryEvent(at(10, 7, 13), "skipped"), HistoryEvent(at(10, 7, 12), "snoozed")]
+def test_칸에_마우스를_올리면_그_시간대의_설명이_뜬다(qapp):
+    events = [done(at(10, 7, 14, 32), "dot_follow", 60), done(at(10, 7, 14, 50), "blink", 66), HistoryEvent(at(10, 7, 9, 0), "skipped")]
     tab, _ = make_tab(qapp, events)
-    assert table_rows(tab) == [["14:00", "깜빡임", "완료", "1분 6초"], ["13:00", "", "건너뜀", ""], ["12:00", "", "미룸", ""]]
-    assert muted_flags(tab) == [False, True, True]
+    chart = tab._timeline
+    assert chart.tip_at(chart.cell_rect(0, 14).center()) == "14시대\n14:32 점 따라가기 완료 · 1분\n14:50 깜빡임 완료 · 1분 6초"
+    assert chart.tip_at(chart.cell_rect(0, 9).center()) == "9시대\n09:00 건너뜀"
+    assert chart.tip_at(chart.cell_rect(0, 11).center()) == ""  # 아무것도 없는 시간대
+    assert chart.tip_at(QPointF(5, 5)) == ""  # 격자 밖
 
 
-def test_기간과_상관없이_최근_기록은_그대로다(qapp):
-    tab, _ = make_tab(qapp, [done(at(10, 7, 9)), done(at(9, 1, 9))])
-    before = row_times(tab)
+def test_같은_시간대의_운동은_한_칸에_모인다(qapp):
+    events = [done(at(10, 7, 14, 5)), done(at(10, 7, 14, 25)), HistoryEvent(at(10, 7, 14, 45), "skipped"), done(at(10, 7, 15, 0))]
+    tab, _ = make_tab(qapp, events)
+    today = tab._timeline._days[0]
+    assert [m.kind for m in today.hour_marks(14)] == ["completed", "completed", "skipped"]
+    assert [m.kind for m in today.hour_marks(15)] == ["completed"]
+    assert today.hour_marks(13) == []
+
+
+def test_하루_흐름이_실제로_그려진다(qapp):
+    """칸 색(스크린 타임), 완료 횟수 글자, 건너뜀 점이 픽셀로 나타나는지 본다."""
+    from eyeexercise.core.usage import UsageLog
+
+    usage = UsageLog()
+    usage.add(NOW.replace(hour=9, minute=30), 3000)
+    events = [done(at(10, 7, 14, 0), "blink"), HistoryEvent(at(10, 7, 11, 10), "skipped"), HistoryEvent(at(10, 7, 11, 20), "snoozed")]
+    tab = RecordsTab(Source(events), now=lambda: NOW, tz=KST, usage_provider=lambda: usage)
+    tab.resize(900, 900)
+    tab.show()
+    qapp.processEvents()
+    chart = tab._timeline
+    image = chart.grab().toImage()
+
+    used = chart.cell_rect(0, 9)
+    color = image.pixelColor(int(used.left()) + 3, int(used.bottom()) - 3)
+    assert color.green() > color.red() + 20  # 스크린 타임이 있는 칸은 초록 계열
+    empty = chart.cell_rect(0, 7)
+    assert image.pixelColor(int(empty.left()) + 3, int(empty.bottom()) - 3).name() == "#f1f3f4"  # 쓰지 않은 시간은 빈 칸
+
+    done_cell = chart.cell_rect(0, 14)  # 완료 1회: 칸 가운데에 숫자 "1"이 그려진다
+    dark = sum(
+        1
+        for x in range(int(done_cell.left()), int(done_cell.right()))
+        for y in range(int(done_cell.top()), int(done_cell.bottom()))
+        if image.pixelColor(x, y).lightness() < 110
+    )
+    assert dark > 5
+
+    both = chart.cell_rect(0, 11)  # 건너뜀(회색)과 미룸(주황) 점이 귀퉁이에 나란히
+    skipped = image.pixelColor(int(both.right() - 4), int(both.top() + 4))
+    snoozed = image.pixelColor(int(both.right() - 11), int(both.top() + 4))
+    assert skipped.name() == "#9aa0a6" and snoozed.name() == "#f9ab00"
+
+
+def test_기간과_상관없이_하루_흐름은_그대로다(qapp):
+    tab, _ = make_tab(qapp, [done(at(10, 7, 9)), done(at(10, 6, 9))])
+    before = day_marks(tab)
     tab.set_period(Period.DAY)
     tab.go(-1)
-    assert row_times(tab) == before == ["09:00", "09:00"]
-    assert group_titles(tab) == ["오늘", "9월 1일 (화)"]
+    assert day_marks(tab) == before
 
 
-# ---- 새로 그리기 ----
+def test_기록이_하나도_없으면_안내_문구만_그린다(qapp):
+    tab, _ = make_tab(qapp)
+    assert all(d.is_empty for d in tab._timeline._days)
+    tab._timeline.grab()  # 그리다가 죽지 않는다
 
 
 def test_새_기록이_생기면_refresh로_반영된다(qapp):
@@ -359,11 +382,11 @@ def test_새_기록이_생기면_refresh로_반영된다(qapp):
     assert count_in_header(tab) == 0
     source.events.append(done(at(10, 7, 14)))
     tab.refresh()
-    assert count_in_header(tab) == 1 and row_times(tab) == ["14:00"]
-    assert group_titles(tab) == ["오늘"]
+    assert count_in_header(tab) == 1 and clocks(tab) == ["14:00"]
+    assert [t for t, _ in marked_days(tab)] == ["오늘"]
     source.events.append(done(at(10, 7, 15)))
     tab.refresh()
-    assert count_in_header(tab) == 2 and row_times(tab) == ["15:00", "14:00"]
+    assert count_in_header(tab) == 2 and clocks(tab) == ["15:00", "14:00"]
 
 
 def test_창이_다시_보일_때_새로_그린다(qapp):
@@ -466,11 +489,28 @@ def test_설정과_시력_기록_메뉴는_각각_실제_화면이다(qapp):
 
 
 def test_메인_창은_넓은_데스크톱_크기로_뜨고_더_작아지지_않는다(qapp):
+    from PySide6.QtGui import QGuiApplication
+
+    from eyeexercise.ui.main_window import fit_to_screen
+
+    # 화면이 넉넉하면 1000×700(최소 860×560), 작은 화면이면 그 안에 들어오게 줄어든다 (테스트 화면은 작다)
+    size, minimum = fit_to_screen(QGuiApplication.primaryScreen().availableGeometry())
     window = MainWindow()
-    assert (window.width(), window.height()) == (1000, 700)
-    assert (window.minimumWidth(), window.minimumHeight()) == (860, 560)
+    assert (window.width(), window.height()) == size
+    assert (window.minimumWidth(), window.minimumHeight()) == minimum
 
 
 def test_하이라이트_카드는_보조_설명이_있을_때만_보여_준다(qapp):
     tab, _ = make_tab(qapp)
     assert all(d.isHidden() for d in tab._highlight_details)  # 운동 카드에는 보조 설명이 없다
+
+
+def test_가로축은_이른_기록이_있으면_그_시각부터_보인다(qapp):
+    tab, _ = make_tab(qapp, [done(at(10, 7, 14))])
+    assert tab._timeline._start_hour == 6
+    tab, _ = make_tab(qapp, [done(at(10, 7, 14)), done(at(10, 6, 4, 30))])
+    assert tab._timeline._start_hour == 3  # 4시 30분 기록이 보이도록 글자 단위(3시간)로 내린다
+    tab, _ = make_tab(qapp, [done(at(10, 7, 0, 10))])
+    chart = tab._timeline
+    assert chart._start_hour == 0
+    assert chart.cell_rect(0, 0).left() == pytest.approx(chart.grid_rect().left() + chart._CELL_GAP / 2)

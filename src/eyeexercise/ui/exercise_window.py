@@ -12,6 +12,7 @@ from eyeexercise.core.exercises import (
     ExerciseStep,
     Phase,
 )
+from eyeexercise.ui import theme
 from eyeexercise.ui.speech import Speaker
 
 # 깜빡임은 눈을 감고 소리로도 안내하므로 작게, 점 따라가기는 점이 움직일 영역이 필요해서 크게 띄운다.
@@ -32,23 +33,36 @@ def window_size(exercise: str, area: QRect) -> tuple[int, int]:
 _FRAME_MS = 16  # 약 60fps. 정밀 타이머를 함께 써야 Windows에서 간격이 고르다 (거친 타이머는 33ms가 실제 약 21fps)
 
 _STYLE = """
-#exercise { background: #ffffff; border: 1px solid #c8ccd0; border-radius: 10px; }
-#exercise QLabel { color: #202124; }
-#message { font-size: 24px; font-weight: bold; }
+#exercise { background: $surface; border: 1px solid $border_strong; border-radius: 10px; }
+#exercise QLabel { color: $text; }
+#message { font-size: $fs_title; font-weight: bold; }
+#hint { color: $text_secondary; font-size: $fs_caption; }
 #exercise QProgressBar {
-    background: #e8eaed; border: none; border-radius: 4px; max-height: 8px; min-height: 8px;
+    background: $hover; border: none; border-radius: 4px; max-height: 8px; min-height: 8px;
 }
-#exercise QProgressBar::chunk { background: #1a73e8; border-radius: 4px; }
+#exercise QProgressBar::chunk { background: $accent; border-radius: 4px; }
 #exercise QPushButton {
-    color: #202124; background: #f1f3f4; border: 1px solid #dadce0;
+    color: $text; background: $chip; border: 1px solid $border_strong;
     border-radius: 4px; padding: 6px 16px;
 }
-#exercise QPushButton:hover { background: #e8eaed; }
+#exercise QPushButton:hover { background: $hover; }
 """
 
 
+def _ease(openness: float) -> float:
+    """눈꺼풀이 움직이는 속도 곡선. 감기·뜨기의 시작과 끝은 천천히, 가운데는 빠르게 해서 실제 눈처럼 부드럽게 보인다."""
+    return openness * openness * (3 - 2 * openness)
+
+
 class EyeWidget(QWidget):
-    """눈 모양. openness 1.0은 활짝 뜬 눈, 0.0은 감은 눈."""
+    """눈 모양. openness 1.0은 활짝 뜬 눈, 0.0은 감은 눈.
+
+    아몬드 모양의 눈꺼풀이 위아래로 닫히고(위 눈꺼풀이 더 많이 움직인다), 완전히 감으면 아래로 처진 곡선이 된다.
+    openness는 시간에 비례해 오므로 그리는 쪽에서 부드러운 곡선(_ease)을 입힌다.
+    """
+
+    _IRIS_R = 31.0
+    _PUPIL_R = 13.0
 
     def __init__(self) -> None:
         super().__init__()
@@ -59,31 +73,48 @@ class EyeWidget(QWidget):
         self._openness = max(0.0, min(1.0, value))
         self.update()
 
+    def lid_path(self) -> QPainterPath:
+        """눈 윤곽(아몬드). 감을수록 납작해지고 아래로 처진다."""
+        e = _ease(self._openness)
+        cx, cy = self.width() / 2, self.height() / 2
+        half_w = min(self.width() * 0.4, 110.0)
+        reach = min(self.height() * 0.4, 58.0) * 1.35  # 3차 곡선 조절점 높이 (실제로 올라가는 높이는 약 3/4)
+        sag = 9.0 * (1 - e)  # 감을수록 눈꼬리 선이 아래로 처진다
+        up = cy + sag - reach * e
+        down = cy + sag + reach * e * 0.55  # 아래 눈꺼풀은 덜 움직인다
+        path = QPainterPath()
+        path.moveTo(cx - half_w, cy)
+        path.cubicTo(cx - half_w * 0.45, up, cx + half_w * 0.45, up, cx + half_w, cy)
+        path.cubicTo(cx + half_w * 0.45, down, cx - half_w * 0.45, down, cx - half_w, cy)
+        return path
+
     def paintEvent(self, _event) -> None:
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        e = _ease(self._openness)
         center = QPointF(self.width() / 2, self.height() / 2)
-        half_w = min(self.width() * 0.4, 110.0)
-        half_h = max(2.0, min(self.height() * 0.4, 58.0) * self._openness)  # 감아도 선은 남긴다
-        eye = QRectF(center.x() - half_w, center.y() - half_h, half_w * 2, half_h * 2)
+        eye = self.lid_path()
 
-        painter.setPen(QPen(QColor("#1a73e8"), 5))
-        painter.setBrush(QColor("#ffffff"))
-        painter.drawEllipse(eye)
+        outline = QPen(theme.color("accent"), 5)
+        outline.setCapStyle(Qt.PenCapStyle.RoundCap)
+        outline.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
+        painter.setPen(outline)
+        painter.setBrush(theme.color("surface"))
+        painter.drawPath(eye)
 
-        if self._openness > 0.15:  # 거의 감겼을 때는 홍채를 그리지 않는다
-            clip = QPainterPath()
-            clip.addEllipse(eye)
-            painter.setClipPath(clip)
+        if e > 0.12:  # 거의 감겼을 때는 홍채를 그리지 않는다
+            painter.setClipPath(eye)
             painter.setPen(Qt.PenStyle.NoPen)
-            painter.setBrush(QColor("#1a73e8"))
-            painter.drawEllipse(center, 34, 34)
-            painter.setBrush(QColor("#202124"))
-            painter.drawEllipse(center, 15, 15)
+            painter.setBrush(theme.color("accent"))
+            painter.drawEllipse(center, self._IRIS_R, self._IRIS_R)
+            painter.setBrush(QColor("#202124"))  # 동공은 어느 테마에서나 어둡게
+            painter.drawEllipse(center, self._PUPIL_R, self._PUPIL_R)
+            painter.setBrush(QColor(255, 255, 255, 235))  # 눈에 생기를 주는 작은 반짝임
+            painter.drawEllipse(QPointF(center.x() - 9, center.y() - 9), 4.5, 4.5)
             painter.setClipping(False)
-            painter.setPen(QPen(QColor("#1a73e8"), 5))  # 홍채가 덮은 윤곽선을 다시 그린다
+            painter.setPen(outline)  # 홍채가 덮은 윤곽선을 다시 그린다
             painter.setBrush(Qt.BrushStyle.NoBrush)
-            painter.drawEllipse(eye)
+            painter.drawPath(eye)
         painter.end()
 
 
@@ -113,15 +144,17 @@ class DotCanvas(QWidget):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         painter.setPen(Qt.PenStyle.NoPen)
-        painter.setBrush(QColor("#f1f3f4"))  # 점이 움직이는 영역을 은은하게 보여 준다
+        painter.setBrush(theme.color("chip"))  # 점이 움직이는 영역을 은은하게 보여 준다
         painter.drawRoundedRect(self.rect(), 10, 10)
         pos = self.dot_position()
         if pos is not None:
-            painter.setBrush(QColor(26, 115, 232, 50))
+            glow = theme.color("accent")
+            glow.setAlpha(50)
+            painter.setBrush(glow)
             painter.drawEllipse(pos, 20, 20)  # 은은한 번짐
-            painter.setBrush(QColor("#1a73e8"))
+            painter.setBrush(theme.color("accent"))
             painter.drawEllipse(pos, 11, 11)
-            painter.setBrush(QColor("#ffffff"))
+            painter.setBrush(theme.color("on_accent"))
             painter.drawEllipse(pos, 3, 3)  # 시선을 모을 가운데 점
         painter.end()
 
@@ -134,7 +167,7 @@ class ExerciseWindow(QWidget):
         super().__init__(None, Qt.WindowType.FramelessWindowHint | Qt.WindowType.WindowStaysOnTopHint)
         self.setObjectName("exercise")
         self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground)
-        self.setStyleSheet(_STYLE)
+        theme.bind(self, _STYLE)
         self.setMinimumSize(*WINDOW_SIZE)
         self.resize(*WINDOW_SIZE)
 
@@ -163,7 +196,7 @@ class ExerciseWindow(QWidget):
         self._button.clicked.connect(self._on_button)
         self._hint = QLabel()
         self._hint.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._hint.setStyleSheet("color: #5f6368; font-size: 12px;")
+        self._hint.setObjectName("hint")
 
         buttons = QHBoxLayout()
         buttons.addStretch()

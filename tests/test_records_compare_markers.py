@@ -45,14 +45,8 @@ def visible_texts(tab, name):
 
 
 def dots(tab):
-    """표의 색 원을 위에서 아래 순서로 돌려준다 (색 이름)."""
-    grid = tab._table._grid
-    found = []
-    for i in range(grid.count()):
-        widget = grid.itemAt(i).widget()
-        if isinstance(widget, QLabel) and widget.objectName() == "dot":
-            found.append((grid.getItemPosition(i)[0], widget.property("marker")))
-    return [color for _, color in sorted(found)]
+    """타임라인의 점 색을 날짜 줄 순서(오늘 먼저), 같은 날은 시간순으로 돌려준다."""
+    return [marker_color(m.kind, m.exercise).name() for d in tab._timeline._days for m in d.marks]
 
 
 def plain(html):
@@ -173,54 +167,47 @@ def test_네_가지_색은_모두_다르다():
     assert len(colors) == 4
 
 
-def test_표의_모든_줄_앞에_색_원이_있고_색이_맞다(qapp):
+def test_점의_색은_운동_종류와_결과에_맞다(qapp):
     events = [
-        done(at(10, 7, 14), "dot_follow"),
-        done(at(10, 7, 13), "blink"),
-        HistoryEvent(at(10, 7, 12), "skipped"),
-        HistoryEvent(at(10, 7, 11), "snoozed"),
+        done(at(10, 7, 11), "dot_follow"),
+        done(at(10, 7, 12), "blink"),
+        HistoryEvent(at(10, 7, 13), "skipped"),
+        HistoryEvent(at(10, 7, 14), "snoozed"),
     ]
     tab, _ = make_tab(qapp, events)
     assert dots(tab) == ["#8e5bd8", "#1a73e8", "#9aa0a6", "#f9ab00"]
 
 
-def test_색_원_개수는_보이는_줄_수와_같고_펼치면_늘어난다(qapp):
-    events = [done(at(10, 7, h)) for h in range(0, 14)]
+def test_점_개수는_보이는_기간의_기록_수이고_펼치면_옛_기록도_보인다(qapp):
+    events = [done(at(10, 7, h)) for h in range(0, 14)] + [done(at(9, 20, 9))]  # 9/20은 7일 밖
     tab, _ = make_tab(qapp, events)
-    assert len(dots(tab)) == 10
-    tab._more.click()
     assert len(dots(tab)) == 14
+    tab._more.click()
+    assert len(dots(tab)) == 15
 
 
-def test_색_원이_있어도_표_머리와_칸은_그대로다(qapp):
-    tab, _ = make_tab(qapp, [done(at(10, 7, 14, 32), "dot_follow", 60)])
-    assert texts(tab, "tableHead") == ["시간", "운동", "결과", "길이"]
-    assert texts(tab, "cell") == ["14:32", "점 따라가기", "완료", "1분"]
-
-
-def test_범례는_네_가지_뜻을_보여_준다(qapp):
+def test_범례는_칸_색과_숫자와_귀퉁이_점의_뜻을_보여_준다(qapp):
     tab, _ = make_tab(qapp, [done(at(10, 7, 14))])
-    assert [plain(t) for t in texts(tab, "legendItem")] == ["● 깜빡임", "● 점 따라가기", "● 건너뜀", "● 미룸"]
+    assert [plain(t) for t in texts(tab, "legendItem")] == ["▬ 스크린 타임 (진할수록 오래)", "3 완료한 운동 횟수", "● 건너뜀", "● 미룸"]
     assert not tab._legend.isHidden()
-    assert re.findall(r"#[0-9a-f]{6}", " ".join(texts(tab, "legendItem"))) == ["#1a73e8", "#8e5bd8", "#9aa0a6", "#f9ab00"]
+    colors = re.findall(r"#[0-9a-f]{6}", " ".join(texts(tab, "legendItem")))
+    assert colors == ["#188038", "#9aa0a6", "#f9ab00"]  # 칸 색은 포인트 색(초록), 건너뜀 회색, 미룸 주황
 
 
-def test_범례_색은_표의_색_원과_같다(qapp):
-    events = [done(at(10, 7, 14), "dot_follow"), done(at(10, 7, 13), "blink"), HistoryEvent(at(10, 7, 12), "skipped"), HistoryEvent(at(10, 7, 11), "snoozed")]
-    tab, _ = make_tab(qapp, events)
-    legend = re.findall(r"#[0-9a-f]{6}", " ".join(texts(tab, "legendItem")))
-    assert sorted(set(dots(tab))) == sorted(legend)
+def test_범례의_점_색은_귀퉁이_점과_같다(qapp):
+    tab, _ = make_tab(qapp, [done(at(10, 7, 14))])
+    colors = re.findall(r"#[0-9a-f]{6}", " ".join(texts(tab, "legendItem")))
+    assert colors[1:] == [marker_color("skipped", "").name(), marker_color("snoozed", "").name()]
 
 
-def test_스크린_타임_표에는_색_원과_범례가_없다(qapp):
+def test_스크린_타임_모드에서도_범례가_보인다(qapp):
     tab, _ = make_tab(qapp, entries=[(10, 7, 9, 600)])
     tab.set_mode(Mode.SCREEN_TIME)
-    assert dots(tab) == []
-    assert tab._legend.isHidden()
+    assert not tab._legend.isHidden()
     tab.set_mode(Mode.EXERCISE)
     assert not tab._legend.isHidden()
 
 
-def test_기록이_없으면_색_원이_없다(qapp):
+def test_기록이_없으면_점이_없다(qapp):
     tab, _ = make_tab(qapp)
     assert dots(tab) == []

@@ -502,3 +502,28 @@ def test_프레임은_약_60fps의_정밀_타이머로_그린다(qapp):
     window, _ = make_window(qapp)
     assert window._timer.interval() <= 17
     assert window._timer.timerType() == Qt.TimerType.PreciseTimer
+
+
+# ---- 눈 모양 (7.5c) ----
+
+
+def test_눈은_감을수록_납작해지고_완전히_감으면_선이_된다(qapp):
+    from eyeexercise.ui.exercise_window import EyeWidget
+
+    eye = EyeWidget()
+    eye.resize(260, 140)
+    heights = []
+    for openness in (1.0, 0.7, 0.4, 0.15, 0.0):
+        eye.set_openness(openness)
+        heights.append(eye.lid_path().boundingRect().height())
+    assert heights == sorted(heights, reverse=True)
+    assert heights[0] > 60 and heights[-1] < 8  # 활짝 뜬 눈은 높고, 감은 눈은 거의 선
+
+
+def test_눈꺼풀_움직임은_양끝이_느리고_가운데가_빠르다():
+    from eyeexercise.ui.exercise_window import _ease
+
+    assert _ease(0.0) == 0.0 and _ease(1.0) == 1.0 and _ease(0.5) == pytest.approx(0.5)
+    assert _ease(0.1) < 0.1 and _ease(0.9) > 0.9  # 시작과 끝은 선형보다 느리게 움직인다
+    values = [_ease(i / 20) for i in range(21)]
+    assert values == sorted(values)  # 항상 한 방향으로 움직인다

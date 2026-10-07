@@ -6,7 +6,7 @@ Windows 데스크톱 앱처럼 왼쪽에 메뉴, 오른쪽에 넓은 본문을 �
 from collections.abc import Callable
 from datetime import datetime
 
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import QRect, Qt, Signal
 from PySide6.QtGui import QCloseEvent, QGuiApplication
 from PySide6.QtWidgets import (
     QHBoxLayout,
@@ -24,24 +24,34 @@ from eyeexercise.core.settings import Settings
 from eyeexercise.core.settings_manager import SettingsManager
 from eyeexercise.core.usage import UsageLog
 from eyeexercise.core.vision import VisionLog
+from eyeexercise.ui import theme
 from eyeexercise.ui.records_tab import RecordsTab
 from eyeexercise.ui.settings_page import SettingsPage
 from eyeexercise.ui.vision_page import VisionPage
 
 WINDOW_SIZE = (1000, 700)
 WINDOW_MIN_SIZE = (860, 560)
+_SCREEN_MARGIN = 40  # 작업 표시줄과 창 테두리를 빼고 화면에 남기는 여유
 SIDEBAR_WIDTH = 176
 
 _STYLE = """
-#sidebar { background: #f0f0f3; border-right: 1px solid #e0e0e4; }
-#appName { font-size: 15px; font-weight: bold; color: #202124; padding: 4px 6px 12px 6px; }
+#sidebar { background: $sidebar; border-right: 1px solid $sidebar_border; }
+#appName { font-size: $fs_heading; font-weight: bold; color: $text; padding: 4px 6px 12px 6px; }
 #navList { background: transparent; border: none; outline: none; }
-#navList::item { padding: 10px 12px; border-radius: 6px; margin: 1px 0; color: #3c4043; }
-#navList::item:hover { background: #e6e6ea; }
-#navList::item:selected { background: #ffffff; color: #1a73e8; font-weight: bold; }
+#navList::item { padding: 10px 12px; border-radius: 6px; margin: 1px 0; color: $text_body; }
+#navList::item:hover { background: $hover; }
+#navList::item:selected { background: $surface; color: $accent; font-weight: bold; }
 """
 
 _MENU = ("기록", "설정", "시력 기록")
+
+
+def fit_to_screen(area: QRect) -> tuple[tuple[int, int], tuple[int, int]]:
+    """(기본 크기, 최소 크기). 배율이 높아 화면이 작게 쓰이면(예: 1080p 150% → 논리 높이 약 720px) 화면 안에 들어오게 줄인다."""
+    max_w, max_h = max(1, area.width() - _SCREEN_MARGIN), max(1, area.height() - _SCREEN_MARGIN)
+    size = (min(WINDOW_SIZE[0], max_w), min(WINDOW_SIZE[1], max_h))
+    minimum = (min(WINDOW_MIN_SIZE[0], size[0]), min(WINDOW_MIN_SIZE[1], size[1]))
+    return size, minimum
 
 
 class MainWindow(QMainWindow):
@@ -58,8 +68,10 @@ class MainWindow(QMainWindow):
         super().__init__()
         self._quitting = False
         self.setWindowTitle("EyeExercise")
-        self.resize(*WINDOW_SIZE)
-        self.setMinimumSize(*WINDOW_MIN_SIZE)
+        screen = QGuiApplication.primaryScreen()
+        size, minimum = fit_to_screen(screen.availableGeometry()) if screen else (WINDOW_SIZE, WINDOW_MIN_SIZE)
+        self.resize(*size)
+        self.setMinimumSize(*minimum)
 
         self.records_tab = RecordsTab(lambda: history.events if history else (), now, usage_provider=lambda: usage or UsageLog())
         self.settings_page = SettingsPage(settings_manager or SettingsManager(Settings()))
@@ -87,7 +99,7 @@ class MainWindow(QMainWindow):
         side_layout.addWidget(self._nav)
 
         central = QWidget()
-        central.setStyleSheet(_STYLE)
+        theme.bind(central, _STYLE)
         layout = QHBoxLayout(central)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)

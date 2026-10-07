@@ -399,7 +399,7 @@ def test_위젯_종류(qapp):
     kinds = {
         LabeledSlider: ["interval_minutes", "snooze_minutes", "idle_pause_minutes", "idle_reset_minutes", "exercises.blink.duration_seconds", "exercises.dot_follow.duration_seconds"],
         Switch: ["exercises.blink.enabled", "exercises.dot_follow.enabled", "sound.enabled", "show_main_window_on_start"],
-        Segmented: ["exercises.dot_follow.speed"],
+        Segmented: ["exercises.dot_follow.speed", "appearance"],
     }
     for kind, paths in kinds.items():
         for path in paths:
@@ -410,7 +410,7 @@ def test_위젯_종류(qapp):
 def test_섹션_제목이_보인다(qapp):
     page, _, _ = make_page(qapp)
     titles = [lbl.text() for lbl in page.findChildren(QLabel) if lbl.objectName() == "sectionTitle"]
-    assert titles == ["알림", "눈 운동", "소리와 시작", "운동 세부", "알림 세부", "자리 비움"]  # 앞의 셋이 기본, 뒤의 셋은 고급
+    assert titles == ["알림", "눈 운동", "화면", "소리와 시작", "운동 세부", "알림 세부", "자리 비움"]  # 앞의 넷이 기본, 뒤의 셋은 고급
 
 
 def test_보정한_결과가_이전_값과_같아도_입력칸은_보정된_값으로_돌아온다(qapp):
@@ -461,7 +461,7 @@ def test_경고와_저장_실패_안내는_색이_있는_글자로_보인다(qap
     warning, status = first_label(page, "warning"), first_label(page, "saveStatus")
     assert not warning.isHidden() and not status.isHidden()
     qapp.processEvents()
-    assert min(label_pixels(page, warning), key=lambda c: c.lightness()).name() == "#b06000"  # 주황
+    assert min(label_pixels(page, warning), key=lambda c: c.lightness()).name() == "#9a5400"  # 주황
     assert min(label_pixels(page, status), key=lambda c: c.lightness()).name() == "#c5221f"  # 빨강
 
 
@@ -563,7 +563,7 @@ def test_점_따라가기_시간의_가장_긴_값은_10분이다(qapp):
 
 # ---- 고급 설정은 접혀 있다 ----
 
-BASIC_PATHS = ["interval_minutes", "exercises.blink.enabled", "exercises.dot_follow.enabled", "sound.enabled", "show_main_window_on_start"]
+BASIC_PATHS = ["interval_minutes", "exercises.blink.enabled", "exercises.dot_follow.enabled", "appearance", "sound.enabled", "show_main_window_on_start"]
 ADVANCED_PATHS = ["snooze_minutes", "idle_pause_minutes", "idle_reset_minutes", "exercises.blink.duration_seconds", "exercises.dot_follow.duration_seconds", "exercises.dot_follow.speed"]
 
 
@@ -680,5 +680,22 @@ def test_슬라이더_값_말풍선은_손잡이를_따라_움직이고_정수_�
     assert xs[0] < xs[1] < xs[2]
     assert slider.slider.singleStep() == 1 and isinstance(slider.value(), int)
     img = slider.bubble.grab().toImage()
-    blue = sum(1 for y in range(img.height()) for x in range(img.width()) if img.pixelColor(x, y).blue() > 200 and img.pixelColor(x, y).red() < 60)
-    assert blue > 100  # 파란 말풍선이 실제로 그려진다
+    blue = sum(1 for y in range(img.height()) for x in range(img.width()) if img.pixelColor(x, y).green() > 100 and img.pixelColor(x, y).red() < 60 and img.pixelColor(x, y).blue() < 90)
+    assert blue > 100  # 초록 말풍선이 실제로 그려진다
+
+
+def test_화면_모드를_고르면_저장되고_테마가_바뀐다(qapp):
+    from eyeexercise.ui import theme
+
+    theme._reset_for_tests()
+    manager = SettingsManager(Settings())
+    manager.subscribe(lambda new, old: theme.set_mode(new.appearance))
+    page = SettingsPage(manager)
+    control = page.control("appearance")
+    assert control.currentData() == "system"
+    assert [b.text() for b in control.buttons()] == ["시스템 설정", "라이트", "다크"]
+    control.buttons()[2].click()
+    assert manager.settings.appearance == "dark" and theme.is_dark()
+    control.buttons()[1].click()
+    assert manager.settings.appearance == "light" and not theme.is_dark()
+    theme._reset_for_tests()
