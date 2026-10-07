@@ -12,6 +12,7 @@ from eyeexercise.core.exercises import build_timeline, enabled_exercises, next_e
 from eyeexercise.core.history import History
 from eyeexercise.core.scheduler import ReminderScheduler, State
 from eyeexercise.core.settings import Settings
+from eyeexercise.core.settings_manager import SettingsManager
 from eyeexercise.core.usage import UsageTracker
 from eyeexercise.platform.win_idle import WinIdleSource
 from eyeexercise.platform.win_window import allow_any_process_to_set_foreground
@@ -47,14 +48,17 @@ class TrayApp:
             self.usage,
             clock,
             idle,
-            lambda: settings.idle_pause_minutes * 60,  # 알림 타이머가 "자리 비움"으로 보는 기준과 같다
+            lambda: self._settings.idle_pause_minutes * 60,  # 알림 타이머가 "자리 비움"으로 보는 기준과 같다. 설정이 바뀌면 바로 따라간다
             save=lambda usage: json_store.save_usage(usage_file, usage),
         )
         self.controller = Controller(scheduler, self.history, usage_tracker=usage_tracker)
         app.aboutToQuit.connect(self.controller.flush_usage)  # 로그오프·종료 때도 마지막 구간을 저장한다
         self.popup = ReminderPopup(settings.snooze_minutes)
         self.exercise_window = ExerciseWindow(create_speaker(settings.sound.enabled))
-        self.main_window = MainWindow(self.history, usage=self.usage)
+        settings_file = paths.settings_path()
+        self.settings_manager = SettingsManager(settings, save=lambda s: json_store.save_settings(settings_file, s))
+        self.settings_manager.subscribe(self._on_settings_changed)
+        self.main_window = MainWindow(self.history, usage=self.usage, settings_manager=self.settings_manager)
         self.tray = TrayIcon(self.controller, app_icon())
 
         self.controller.reminder_due.connect(self.popup.show_at_corner)
@@ -89,6 +93,15 @@ class TrayApp:
         self.exercise_window.hide()
         self.tray.hide()
         self._app.quit()
+
+    def _on_settings_changed(self, new: Settings, old: Settings) -> None:
+        """설정 화면에서 값을 바꾸면 실행 중인 부분에 바로 반영한다."""
+        self._settings = new  # 운동 선택·시간, 스크린 타임 기준 등은 이 값을 그때그때 읽는다
+        self.controller.apply_settings(new)
+        if new.snooze_minutes != old.snooze_minutes:
+            self.popup.set_snooze_minutes(new.snooze_minutes)
+        if new.sound.enabled != old.sound.enabled:
+            self.exercise_window.set_speaker(create_speaker(new.sound.enabled))
 
     def _on_state_changed(self, state: State) -> None:
         # 버튼이든 트레이 메뉴든, 알림 상태를 벗어나면 팝업을 닫는다.

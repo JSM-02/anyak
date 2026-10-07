@@ -293,3 +293,53 @@ def build_timeline(exercise: str, settings: ExercisesSettings) -> BlinkTimeline 
     if exercise == EXERCISE_DOT_FOLLOW:
         return dot_follow_timeline(settings.dot_follow.duration_seconds, settings.dot_follow.speed)
     raise ValueError(f"알 수 없는 운동: {exercise}")
+
+
+# ---- 운동 길이 프리셋 (설정 화면에서 "짧게/보통/길게"로 고른다) ----
+
+
+@dataclass(frozen=True)
+class LengthPreset:
+    key: str
+    label: str
+    blink_cycles: int  # 깜빡임 사이클(회) 수
+    dot_seconds: int  # 점 따라가기 총 시간(초)
+
+
+LENGTH_PRESETS = (
+    LengthPreset("short", "짧게", 5, 30),
+    LengthPreset("normal", "보통", 10, 60),  # 현재 기본값과 같다: 깜빡임 10회(66초) + 점 따라가기 1분
+    LengthPreset("long", "길게", 15, 90),
+)
+
+
+def blink_seconds_for_cycles(cycles: int) -> int:
+    """깜빡임 사이클 수에 맞는 설정 시간(초). 준비·마무리가 더해진다. 사용자는 '몇 회'로 생각하고 초는 몰라도 된다."""
+    return PREPARE_SECONDS + FINISH_SECONDS + max(1, cycles) * CYCLE_SECONDS
+
+
+def blink_cycles_for_seconds(duration_seconds: int) -> int:
+    """설정된 시간(초)이 몇 사이클인지. 사이클 수로 나누어떨어지지 않으면 남는 시간은 마지막 쉬기가 흡수한다."""
+    return blink_timeline(duration_seconds).cycles
+
+
+def preset_changes(key: str) -> dict[str, int]:
+    """프리셋을 고르면 바꿀 설정 경로와 값. 알 수 없는 키는 KeyError."""
+    for preset in LENGTH_PRESETS:
+        if preset.key == key:
+            return {
+                "exercises.blink.duration_seconds": blink_seconds_for_cycles(preset.blink_cycles),
+                "exercises.dot_follow.duration_seconds": preset.dot_seconds,
+            }
+    raise KeyError(key)
+
+
+def current_preset(settings: ExercisesSettings) -> str | None:
+    """지금 설정이 어느 프리셋과 같은지. 고급 설정에서 따로 정했다면 None."""
+    for preset in LENGTH_PRESETS:
+        if (
+            settings.blink.duration_seconds == blink_seconds_for_cycles(preset.blink_cycles)
+            and settings.dot_follow.duration_seconds == preset.dot_seconds
+        ):
+            return preset.key
+    return None

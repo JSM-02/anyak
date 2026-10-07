@@ -459,10 +459,10 @@ def test_메뉴를_고르면_본문이_바뀐다(qapp):
     assert window._stack.currentWidget() is window.records_tab
 
 
-def test_아직_없는_화면은_안내_문구를_보여_준다(qapp):
+def test_아직_없는_화면은_안내_문구를_보여_주고_설정은_설정_화면이다(qapp):
     window = MainWindow()
-    texts = [window._stack.widget(i).text() for i in (1, 2)]
-    assert all("다음 단계" in t for t in texts)
+    assert window._stack.widget(1) is window.settings_page  # 설정 메뉴는 실제 설정 화면
+    assert "다음 단계" in window._stack.widget(2).text()  # 시력 기록은 아직 안내 문구
 
 
 def test_메인_창은_넓은_데스크톱_크기로_뜨고_더_작아지지_않는다(qapp):

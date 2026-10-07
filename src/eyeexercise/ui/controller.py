@@ -9,6 +9,7 @@ from PySide6.QtCore import QObject, QTimer, Signal
 from eyeexercise.core.clock import SystemClock
 from eyeexercise.core.history import History
 from eyeexercise.core.scheduler import InvalidTransition, ReminderDue, ReminderScheduler, State
+from eyeexercise.core.settings import Settings
 from eyeexercise.core.usage import UsageTracker
 
 log = logging.getLogger(__name__)
@@ -54,6 +55,10 @@ class Controller(QObject):
     def stop(self) -> None:
         self._timer.stop()
         self.flush_usage()
+
+    def apply_settings(self, settings: Settings) -> None:
+        """바뀐 설정을 스케줄러에 전달한다. 이미 센 시간은 유지하고 다음 알림부터 새 주기가 적용된다."""
+        self._scheduler.apply_settings(settings)
 
     def flush_usage(self) -> None:
         """스크린 타임의 마지막 구간까지 저장한다. 앱을 끝낼 때 부른다."""

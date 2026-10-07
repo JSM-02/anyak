@@ -315,3 +315,89 @@ def test_운동에_맞는_타임라인을_만든다():
 def test_알_수_없는_운동은_거부한다():
     with pytest.raises(ValueError, match="알 수 없는 운동"):
         build_timeline("jumping_jack", ExercisesSettings())
+
+
+# ---- 운동 길이 프리셋 ----
+
+
+def test_프리셋은_짧게_보통_길게_세_가지():
+    from eyeexercise.core.exercises import LENGTH_PRESETS
+
+    assert [(p.key, p.label) for p in LENGTH_PRESETS] == [("short", "짧게"), ("normal", "보통"), ("long", "길게")]
+    assert [(p.blink_cycles, p.dot_seconds) for p in LENGTH_PRESETS] == [(5, 30), (10, 60), (15, 90)]
+
+
+def test_보통은_현재_기본_설정과_같다():
+    from eyeexercise.core.exercises import current_preset
+    from eyeexercise.core.settings import Settings
+
+    assert current_preset(Settings().exercises) == "normal"
+
+
+def test_사이클_수와_설정_시간은_서로_바꿀_수_있다():
+    from eyeexercise.core.exercises import blink_cycles_for_seconds, blink_seconds_for_cycles
+
+    assert [blink_seconds_for_cycles(n) for n in (1, 5, 10, 15)] == [12, 36, 66, 96]
+    assert [blink_cycles_for_seconds(s) for s in (12, 36, 66, 96)] == [1, 5, 10, 15]
+    for cycles in range(1, 50):  # 어느 사이클 수든 되돌려도 같다
+        assert blink_cycles_for_seconds(blink_seconds_for_cycles(cycles)) == cycles
+
+
+def test_사이클_수가_0이하여도_최소_한_사이클():
+    from eyeexercise.core.exercises import blink_seconds_for_cycles
+
+    assert blink_seconds_for_cycles(0) == blink_seconds_for_cycles(1) == 12
+
+
+def test_사이클_수로_만든_시간은_설정_범위_안이다():
+    from eyeexercise.core.exercises import blink_cycles_for_seconds, blink_seconds_for_cycles
+    from eyeexercise.core.settings import BLINK_SECONDS_RANGE
+
+    top = blink_cycles_for_seconds(BLINK_SECONDS_RANGE[1])  # 설정 최댓값(300초)이 몇 사이클인지
+    assert BLINK_SECONDS_RANGE[0] <= blink_seconds_for_cycles(1) and blink_seconds_for_cycles(top) <= BLINK_SECONDS_RANGE[1]
+    assert top == 49
+
+
+def test_프리셋을_고르면_두_운동의_시간이_함께_바뀐다():
+    from eyeexercise.core.exercises import preset_changes
+    from eyeexercise.core.settings import Settings, with_changes
+
+    s = with_changes(Settings(), preset_changes("long"))
+    assert s.exercises.blink.duration_seconds == 96 and s.exercises.dot_follow.duration_seconds == 90
+    s = with_changes(Settings(), preset_changes("short"))
+    assert s.exercises.blink.duration_seconds == 36 and s.exercises.dot_follow.duration_seconds == 30
+
+
+def test_모든_프리셋의_값은_설정_범위를_벗어나지_않아_보정되지_않는다():
+    from eyeexercise.core.exercises import LENGTH_PRESETS, current_preset, preset_changes
+    from eyeexercise.core.settings import Settings, with_changes
+
+    for preset in LENGTH_PRESETS:
+        s = with_changes(Settings(), preset_changes(preset.key))
+        assert current_preset(s.exercises) == preset.key  # 보정 때문에 다른 값이 되면 프리셋으로 인식되지 않는다
+
+
+def test_고급_설정에서_따로_정하면_프리셋이_없다():
+    from eyeexercise.core.exercises import current_preset
+    from eyeexercise.core.settings import Settings, with_changes
+
+    assert current_preset(with_changes(Settings(), {"exercises.blink.duration_seconds": 70}).exercises) is None
+    assert current_preset(with_changes(Settings(), {"exercises.dot_follow.duration_seconds": 45}).exercises) is None
+    assert current_preset(with_changes(Settings(), {"exercises.blink.duration_seconds": 36}).exercises) is None  # 한쪽만 짧게는 프리셋이 아니다
+
+
+def test_알_수_없는_프리셋은_거부한다():
+    import pytest
+
+    from eyeexercise.core.exercises import preset_changes
+
+    with pytest.raises(KeyError):
+        preset_changes("huge")
+
+
+def test_프리셋_길이는_짧게_보통_길게_순으로_길어진다():
+    from eyeexercise.core.exercises import LENGTH_PRESETS, blink_seconds_for_cycles
+
+    blink = [blink_seconds_for_cycles(p.blink_cycles) for p in LENGTH_PRESETS]
+    dot = [p.dot_seconds for p in LENGTH_PRESETS]
+    assert blink == sorted(blink) and dot == sorted(dot) and len(set(blink)) == 3 and len(set(dot)) == 3

@@ -41,7 +41,9 @@ class ReminderPopup(QWidget):
 
         start = QPushButton("시작")
         start.setObjectName("primary")
-        snooze = QPushButton(f"{snooze_minutes}분 미루기")
+        snooze = QPushButton()
+        self._snooze_button = snooze
+        self.set_snooze_minutes(snooze_minutes)
         skip = QPushButton("건너뛰기")
         start.clicked.connect(self.start_clicked)
         snooze.clicked.connect(self.snooze_clicked)
@@ -58,6 +60,10 @@ class ReminderPopup(QWidget):
         layout.addWidget(title)
         layout.addWidget(body)
         layout.addLayout(buttons)
+
+    def set_snooze_minutes(self, minutes: int) -> None:
+        """설정에서 미루기 시간을 바꾸면 버튼 글자도 바꾼다."""
+        self._snooze_button.setText(f"{minutes}분 미루기")
 
     def show_at_corner(self) -> None:
         """주 모니터의 오른쪽 아래(작업 표시줄 위)에 띄운다."""

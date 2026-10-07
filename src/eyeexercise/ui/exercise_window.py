@@ -180,6 +180,12 @@ class ExerciseWindow(QWidget):
         layout.addLayout(buttons)
         layout.addWidget(self._hint)
 
+    def set_speaker(self, speaker: Speaker | None) -> None:
+        """설정에서 소리를 켜거나 끄면 바꾼다. 진행 중인 운동이 있으면 그 소리는 멈추고 다음 단계부터 새 설정을 쓴다."""
+        if self._speaker is not None:
+            self._speaker.stop()
+        self._speaker = speaker
+
     @property
     def running(self) -> bool:
         return self._running

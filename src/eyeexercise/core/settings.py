@@ -1,5 +1,6 @@
 """앱 설정 모델. 기본값, 값 검증·보정, dict 변환을 담당한다 (파일 I/O 없음)."""
 
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -133,3 +134,23 @@ def settings_to_dict(settings: Settings) -> dict:
         "show_main_window_on_start": settings.show_main_window_on_start,
         "sound": {"enabled": settings.sound.enabled},
     }
+
+
+def with_changes(settings: Settings, changes: Mapping[str, Any]) -> Settings:
+    """점으로 이은 경로(예: "interval_minutes", "exercises.blink.enabled")의 값을 바꾼 새 설정을 만든다.
+
+    값은 파일을 읽을 때와 같은 규칙으로 보정된다 (범위, 잘못된 타입, 정지 기준 < 초기화 기준).
+    없는 경로, `version`, 항목 묶음 전체(예: "exercises.blink")를 바꾸려 하면 KeyError다. 오타가 조용히 무시되지 않게 하려는 것이다.
+    """
+    data = settings_to_dict(settings)
+    for path, value in changes.items():
+        keys = path.split(".")
+        target = data
+        for key in keys[:-1]:
+            if not isinstance(target.get(key), dict):
+                raise KeyError(path)
+            target = target[key]
+        if keys[-1] not in target or path == "version" or isinstance(target[keys[-1]], dict):
+            raise KeyError(path)  # 없는 항목, version, 항목 묶음 전체는 바꿀 수 없다
+        target[keys[-1]] = value
+    return settings_from_dict(data)

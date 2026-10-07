@@ -20,8 +20,11 @@ from PySide6.QtWidgets import (
 
 from eyeexercise.core.clock import SystemClock
 from eyeexercise.core.history import History
+from eyeexercise.core.settings import Settings
+from eyeexercise.core.settings_manager import SettingsManager
 from eyeexercise.core.usage import UsageLog
 from eyeexercise.ui.records_tab import RecordsTab
+from eyeexercise.ui.settings_page import SettingsPage
 
 WINDOW_SIZE = (1000, 700)
 WINDOW_MIN_SIZE = (860, 560)
@@ -37,8 +40,9 @@ _STYLE = """
 #placeholder { color: #80868b; font-size: 14px; background: #f5f5f7; }
 """
 
-# (메뉴 이름, 아직 만들지 않은 화면의 안내)
-_PAGES = (("기록", None), ("설정", "설정 화면은 다음 단계에서 추가됩니다."), ("시력 기록", "시력 기록 화면은 다음 단계에서 추가됩니다."))
+# 아직 만들지 않은 화면의 안내
+_PLACEHOLDER_TEXT = "시력 기록 화면은 다음 단계에서 추가됩니다."
+_MENU = ("기록", "설정", "시력 기록")
 
 
 class MainWindow(QMainWindow):
@@ -49,6 +53,7 @@ class MainWindow(QMainWindow):
         history: History | None = None,
         now: Callable[[], datetime] = SystemClock().now,
         usage: UsageLog | None = None,
+        settings_manager: SettingsManager | None = None,
     ) -> None:
         super().__init__()
         self._quitting = False
@@ -57,20 +62,18 @@ class MainWindow(QMainWindow):
         self.setMinimumSize(*WINDOW_MIN_SIZE)
 
         self.records_tab = RecordsTab(lambda: history.events if history else (), now, usage_provider=lambda: usage or UsageLog())
+        self.settings_page = SettingsPage(settings_manager or SettingsManager(Settings()))
+        placeholder = QLabel(_PLACEHOLDER_TEXT)
+        placeholder.setObjectName("placeholder")
+        placeholder.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._stack = QStackedWidget()
-        for name, placeholder_text in _PAGES:
-            if placeholder_text is None:
-                self._stack.addWidget(self.records_tab)
-                continue
-            page = QLabel(placeholder_text)
-            page.setObjectName("placeholder")
-            page.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        for page in (self.records_tab, self.settings_page, placeholder):  # _MENU와 같은 순서
             self._stack.addWidget(page)
 
         self._nav = QListWidget()
         self._nav.setObjectName("navList")
         self._nav.setFocusPolicy(Qt.FocusPolicy.NoFocus)
-        self._nav.addItems([name for name, _ in _PAGES])
+        self._nav.addItems(_MENU)
         self._nav.currentRowChanged.connect(self._stack.setCurrentIndex)
         self._nav.setCurrentRow(0)
 

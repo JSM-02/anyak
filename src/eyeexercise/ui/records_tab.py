@@ -87,7 +87,7 @@ _MODE_LABELS = ((Mode.EXERCISE, "운동"), (Mode.SCREEN_TIME, "스크린 타임"
 
 _STYLE = """
 #records, #recordsContent { background: #f5f5f7; }
-#records QLabel { color: #202124; background: transparent; }
+#records QLabel { background: transparent; }
 #pageTitle { font-size: 24px; font-weight: bold; }
 #segment { background: #e6e6ea; border-radius: 7px; }
 #segment QPushButton {
