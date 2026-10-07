@@ -1,6 +1,5 @@
 import pytest
 
-from eyeexercise.core.camera import BlinkDetector, NullDetector
 from eyeexercise.core.exercises import (
     CYCLE_SECONDS,
     LOOK_AWAY_SECONDS,
@@ -82,8 +81,8 @@ def test_쉬는_동안에는_문구가_없다():
     assert t.step_at(8.0).phase is Phase.REST
     assert t.step_at(8.0).message == ""
     assert all(t.step_at(i / 10).message == "" for i in range(80, 90))
-    # 쉬기를 뺀 모든 단계에는 문구가 있다
-    assert all(MESSAGES[p] for p in Phase if p is not Phase.REST)
+    # 쉬기와 점 따라가기 전용 단계(문구는 패턴이 정한다)를 뺀 모든 단계에는 문구가 있다
+    assert all(MESSAGES[p] for p in Phase if p not in (Phase.REST, Phase.TRACK))
 
 
 def test_눈은_천천히_감기고_천천히_뜬다():
@@ -199,12 +198,13 @@ def test_너무_짧게_설정해도_사이클_1회는_보장한다():
 
 
 def test_모든_시간에서_끝까지_단계가_빠짐없이_이어진다():
-    # 총 시간이 달라도 처음엔 준비, 끝엔 마무리 뒤 먼 곳 보기이고 중간에 모든 단계가 한 번 이상 나온다
+    # 총 시간이 달라도 처음엔 준비, 끝엔 마무리 뒤 먼 곳 보기이고 중간에 깜빡임의 모든 단계가 한 번 이상 나온다
+    # (점 따라가기 전용 TRACK 단계는 깜빡임에 나오지 않는다)
     for seconds in (12, 17, 66, 99, 300):
         t = blink_timeline(seconds)
         total = t.total_seconds
         phases = {t.step_at(i / 4).phase for i in range(0, (total + LOOK_AWAY_SECONDS) * 4)}
-        assert phases == set(Phase)
+        assert phases == set(Phase) - {Phase.TRACK}
         assert phase_at(t, 0) is Phase.PREPARE
         assert phase_at(t, total - 0.1) is Phase.FINISH
         assert phase_at(t, total) is Phase.LOOK_AWAY
@@ -219,16 +219,3 @@ def test_음성_안내는_눈_감고_뜰_때와_먼_곳_보기_때_나온다():
 
 def test_모든_단계에_음성_정의가_있다():
     assert set(SPOKEN) == set(Phase)
-
-
-def test_카메라_없이도_동작하는_기본_감지기():
-    detector: BlinkDetector = NullDetector()
-    detector.start()
-    assert detector.blink_count() == 0
-    detector.stop()
-
-
-def test_타임라인은_감지기와_무관하다():
-    # 카메라 없이 타임라인만으로 운동 전체를 진행할 수 있어야 한다
-    t = blink_timeline(66)
-    assert t.step_at(66 + LOOK_AWAY_SECONDS).done

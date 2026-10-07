@@ -1,14 +1,35 @@
-"""깜빡임 운동 창. 타임라인(core/exercises)이 계산한 값을 그리기만 한다."""
+"""운동 창. 타임라인(core/exercises)이 계산한 값을 그리기만 한다. 깜빡임 운동과 점 따라가기를 모두 띄운다."""
 
-from PySide6.QtCore import QElapsedTimer, QPointF, QRectF, Qt, QTimer, Signal
+from PySide6.QtCore import QElapsedTimer, QPointF, QRect, QRectF, Qt, QTimer, Signal
 from PySide6.QtGui import QCloseEvent, QColor, QCursor, QGuiApplication, QKeyEvent, QPainter, QPainterPath, QPen
 from PySide6.QtWidgets import QHBoxLayout, QLabel, QProgressBar, QPushButton, QVBoxLayout, QWidget
 
-from eyeexercise.core.exercises import EXERCISE_BLINK, BlinkStep, BlinkTimeline, Phase, blink_timeline
+from eyeexercise.core.exercises import (
+    EXERCISE_BLINK,
+    EXERCISE_DOT_FOLLOW,
+    BlinkTimeline,
+    DotFollowTimeline,
+    ExerciseStep,
+    Phase,
+)
 from eyeexercise.ui.speech import Speaker
 
-WINDOW_SIZE = (480, 320)  # 소리로도 안내하므로 화면은 작게 둔다
-_FRAME_MS = 33  # 약 30fps
+# 깜빡임은 눈을 감고 소리로도 안내하므로 작게, 점 따라가기는 점이 움직일 영역이 필요해서 크게 띄운다.
+WINDOW_SIZES = {EXERCISE_BLINK: (480, 320), EXERCISE_DOT_FOLLOW: (640, 440)}
+WINDOW_SIZE = WINDOW_SIZES[EXERCISE_BLINK]
+DOT_WINDOW_SCREEN_RATIO = 0.7  # 점 따라가기 창이 차지하는 화면 비율. 눈동자가 크게 움직이도록 크게 띄운다
+_SCREEN_MARGIN = 40  # 화면 가장자리에서 띄우는 최소 여백
+
+
+def window_size(exercise: str, area: QRect) -> tuple[int, int]:
+    """운동 창의 크기. 깜빡임은 고정 크기, 점 따라가기는 화면의 70%(최소 크기 이상, 화면 안에서)."""
+    if exercise != EXERCISE_DOT_FOLLOW:
+        return WINDOW_SIZES[exercise]
+    min_w, min_h = WINDOW_SIZES[EXERCISE_DOT_FOLLOW]
+    width = max(min_w, round(area.width() * DOT_WINDOW_SCREEN_RATIO))  # int()는 1400*0.7=979.99…를 979로 자른다
+    height = max(min_h, round(area.height() * DOT_WINDOW_SCREEN_RATIO))
+    return min(width, area.width() - _SCREEN_MARGIN), min(height, area.height() - _SCREEN_MARGIN)
+_FRAME_MS = 16  # 약 60fps. 정밀 타이머를 함께 써야 Windows에서 간격이 고르다 (거친 타이머는 33ms가 실제 약 21fps)
 
 _STYLE = """
 #exercise { background: #ffffff; border: 1px solid #c8ccd0; border-radius: 10px; }
@@ -66,6 +87,45 @@ class EyeWidget(QWidget):
         painter.end()
 
 
+class DotCanvas(QWidget):
+    """점 따라가기 화면. 점의 위치는 0~1 정규화 좌표로 받아 영역 크기에 맞춰 그린다. None이면 점을 그리지 않는다."""
+
+    _MARGIN = 18  # 점이 영역 가장자리에 붙지 않게 하는 안쪽 여백
+
+    def __init__(self) -> None:
+        super().__init__()
+        self._dot: tuple[float, float] | None = None
+        self.setMinimumSize(240, 140)
+
+    def set_dot(self, dot: tuple[float, float] | None) -> None:
+        self._dot = dot
+        self.update()
+
+    def dot_position(self) -> QPointF | None:
+        """화면에 그려지는 점의 위치(위젯 좌표). 점이 없으면 None."""
+        if self._dot is None:
+            return None
+        m = self._MARGIN
+        w, h = max(1, self.width() - 2 * m), max(1, self.height() - 2 * m)
+        return QPointF(m + self._dot[0] * w, m + self._dot[1] * h)
+
+    def paintEvent(self, _event) -> None:
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(QColor("#f1f3f4"))  # 점이 움직이는 영역을 은은하게 보여 준다
+        painter.drawRoundedRect(self.rect(), 10, 10)
+        pos = self.dot_position()
+        if pos is not None:
+            painter.setBrush(QColor(26, 115, 232, 50))
+            painter.drawEllipse(pos, 20, 20)  # 은은한 번짐
+            painter.setBrush(QColor("#1a73e8"))
+            painter.drawEllipse(pos, 11, 11)
+            painter.setBrush(QColor("#ffffff"))
+            painter.drawEllipse(pos, 3, 3)  # 시선을 모을 가운데 점
+        painter.end()
+
+
 class ExerciseWindow(QWidget):
     completed = Signal(str, int)  # 운동 이름, 총 시간(초)
     aborted = Signal()
@@ -80,14 +140,17 @@ class ExerciseWindow(QWidget):
 
         self._speaker = speaker
         self._last_phase: Phase | None = None
-        self._timeline: BlinkTimeline | None = None
-        self._running = False  # 중단할 수 있는 상태 (깜빡임 운동이 끝나기 전)
+        self._timeline: BlinkTimeline | DotFollowTimeline | None = None
+        self._running = False  # 중단할 수 있는 상태 (운동이 끝나기 전)
+        self._look_away_layout = False  # 점 따라가기에서 먼 곳 보기 화면(깜빡임과 같은 모양)으로 바꿨는지
         self._elapsed = QElapsedTimer()
         self._timer = QTimer(self)
+        self._timer.setTimerType(Qt.TimerType.PreciseTimer)
         self._timer.setInterval(_FRAME_MS)
         self._timer.timeout.connect(self._on_frame)
 
         self._eye = EyeWidget()
+        self._dots = DotCanvas()
         self._message = QLabel()
         self._message.setObjectName("message")
         self._message.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -111,6 +174,7 @@ class ExerciseWindow(QWidget):
         layout.setContentsMargins(28, 20, 28, 16)
         layout.setSpacing(12)
         layout.addWidget(self._eye, stretch=1)
+        layout.addWidget(self._dots, stretch=1)
         layout.addWidget(self._message)
         layout.addWidget(self._progress)
         layout.addLayout(buttons)
@@ -120,16 +184,25 @@ class ExerciseWindow(QWidget):
     def running(self) -> bool:
         return self._running
 
-    def start(self, duration_seconds: int) -> None:
+    def start(self, timeline: BlinkTimeline | DotFollowTimeline) -> None:
         """운동을 시작한다. 마우스 커서가 있는 모니터의 가운데에 띄운다."""
-        self._timeline = blink_timeline(duration_seconds)
+        self._timeline = timeline
+        is_blink = timeline.exercise == EXERCISE_BLINK
+        self._eye.setVisible(is_blink)
+        self._dots.setVisible(not is_blink)
+        self._look_away_layout = False
+        area = self._screen_area()
+        size = window_size(timeline.exercise, area)
+        self.setMinimumSize(0, 0)  # 이전 운동의 최소 크기가 남아 작게 줄이지 못하는 일을 막는다
+        self.setMinimumSize(*size)
+        self.resize(*size)
+        self.move(area.center().x() - size[0] // 2, area.center().y() - size[1] // 2)
         self._running = True
         self._last_phase = None
         self._button.setText("중단")
         self._hint.setText("Esc 키로도 중단할 수 있어요")
         self._elapsed.start()
         self._apply(self._timeline.step_at(0))
-        self._center_on_cursor_screen()
         self.show()
         self.raise_()
         self.activateWindow()  # Esc 키를 받기 위해 포커스를 가져온다
@@ -160,16 +233,20 @@ class ExerciseWindow(QWidget):
         step = self._timeline.step_at(self._elapsed.elapsed() / 1000.0)
         self._apply(step)
         if step.finished and self._running:
-            # 깜빡임 운동을 마쳤다. 먼 곳 바라보기 중에 닫아도 완료로 센다.
+            # 운동을 마쳤다. 먼 곳 바라보기 중에 닫아도 완료로 센다.
             self._running = False
             self._button.setText("닫기")
             self._hint.setText("Esc 키로 닫을 수 있어요")
-            self.completed.emit(EXERCISE_BLINK, self._timeline.total_seconds)
+            self.completed.emit(self._timeline.exercise, self._timeline.total_seconds)
         if step.done:
             self.close()  # 카운트다운이 끝나면 저절로 닫는다
 
-    def _apply(self, step: BlinkStep) -> None:
-        self._eye.set_openness(step.eye_openness)
+    def _apply(self, step: ExerciseStep) -> None:
+        if step.phase is Phase.LOOK_AWAY and not self._look_away_layout and self._timeline.exercise != EXERCISE_BLINK:
+            self._enter_look_away_layout()
+        if step.eye_openness is not None:
+            self._eye.set_openness(step.eye_openness)
+        self._dots.set_dot(step.dot)
         text = step.message
         if step.countdown:
             text = f"{text} · {step.countdown}"
@@ -180,7 +257,19 @@ class ExerciseWindow(QWidget):
             if self._speaker is not None:
                 self._speaker.cue(step.phase)
 
-    def _center_on_cursor_screen(self) -> None:
+    def _enter_look_away_layout(self) -> None:
+        """점 따라가기의 먼 곳 바라보기: 깜빡임 운동과 같은 모양(작은 창 + 눈 모양)으로 바꾼다. 창 가운데는 그대로 둔다."""
+        self._look_away_layout = True
+        center = self.geometry().center()
+        self._dots.setVisible(False)
+        self._eye.setVisible(True)
+        self._eye.set_openness(1.0)
+        width, height = WINDOW_SIZES[EXERCISE_BLINK]
+        self.setMinimumSize(width, height)
+        self.resize(width, height)
+        self.move(center.x() - width // 2, center.y() - height // 2)
+
+    def _screen_area(self) -> QRect:
+        """마우스 커서가 있는 모니터에서 작업 표시줄을 뺀 영역."""
         screen = QGuiApplication.screenAt(QCursor.pos()) or QGuiApplication.primaryScreen()
-        area = screen.availableGeometry()
-        self.move(area.center().x() - self.width() // 2, area.center().y() - self.height() // 2)
+        return screen.availableGeometry()

@@ -12,7 +12,6 @@ def test_기본값():
     assert s.exercises.dot_follow.duration_seconds == 60
     assert s.exercises.dot_follow.speed == "normal"
     assert s.show_main_window_on_start is False
-    assert s.camera.enabled is False  # 카메라는 opt-in
 
 
 def test_빈_dict나_dict가_아닌_값은_기본값():
@@ -57,7 +56,6 @@ def test_타입이_잘못된_값은_기본값():
             "snooze_minutes": 5.5,
             "idle_reset_minutes": True,  # bool은 정수로 취급하지 않는다
             "show_main_window_on_start": "yes",
-            "camera": {"enabled": 1},
             "exercises": {"dot_follow": {"speed": "turbo"}},
         }
     )
@@ -65,7 +63,6 @@ def test_타입이_잘못된_값은_기본값():
     assert s.snooze_minutes == 5
     assert s.idle_reset_minutes == 5
     assert s.show_main_window_on_start is False
-    assert s.camera.enabled is False
     assert s.exercises.dot_follow.speed == "normal"
 
 

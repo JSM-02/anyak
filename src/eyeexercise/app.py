@@ -8,6 +8,7 @@ from PySide6.QtCore import QTimer
 from PySide6.QtWidgets import QApplication, QSystemTrayIcon
 
 from eyeexercise.core.clock import SystemClock
+from eyeexercise.core.exercises import build_timeline, enabled_exercises, next_exercise
 from eyeexercise.core.history import History
 from eyeexercise.core.scheduler import ReminderScheduler, State
 from eyeexercise.core.settings import Settings
@@ -82,13 +83,14 @@ class TrayApp:
             self.popup.hide()
 
     def _on_exercise_started(self) -> None:
-        # 지금은 깜빡임 운동만 있다. 점 따라가기는 6단계에서 추가한다.
-        blink = self._settings.exercises.blink
-        if not blink.enabled:
-            self.tray.show_message("사용할 수 있는 운동이 없어요. 설정에서 깜빡임 운동을 켜 주세요.")
+        # 켜진 운동을 번갈아 진행한다. 마지막으로 마친 운동의 다음 것을 고른다.
+        exercises = self._settings.exercises
+        choice = next_exercise(enabled_exercises(exercises), self.history.last_completed_exercise())
+        if choice is None:
+            self.tray.show_message("사용할 수 있는 운동이 없어요. 설정에서 운동을 하나 이상 켜 주세요.")
             self.controller.abort_exercise()
             return
-        self.exercise_window.start(blink.duration_seconds)
+        self.exercise_window.start(build_timeline(choice, exercises))
 
     def _on_hidden_to_tray(self) -> None:
         # 창이 사라져서 당황하지 않도록, 실행 중 처음 한 번만 알려준다.

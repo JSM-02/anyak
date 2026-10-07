@@ -2,26 +2,34 @@
 
 화면은 `step_at(경과 초)`가 돌려주는 값을 그리기만 한다.
 
-흐름: 깜빡임 운동(준비 → 사이클 반복 → 마무리, 총 `total_seconds`)이 끝나면 곧바로
+흐름: 운동(준비 → 본 운동 → 마무리, 총 `total_seconds`)이 끝나면 곧바로
 먼 곳 바라보기(20초 카운트다운)가 이어지고, 그것까지 끝나면 `done`이 된다.
+운동은 두 가지다. 깜빡임 운동(`blink_timeline`)과 점 따라가기(`dot_follow_timeline`).
 """
 
 import math
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from enum import Enum
+from typing import ClassVar
+
+from eyeexercise.core.settings import ExercisesSettings
 
 EXERCISE_BLINK = "blink"
+EXERCISE_DOT_FOLLOW = "dot_follow"
+EXERCISES = (EXERCISE_BLINK, EXERCISE_DOT_FOLLOW)  # 번갈아 진행하는 순서
+
+PREPARE_SECONDS = 3
+FINISH_SECONDS = 3
+LOOK_AWAY_SECONDS = 20  # 운동 뒤에 먼 곳을 바라보는 시간 (20-20-20 규칙)
 
 # 깜빡임 운동 구성(초). 준비 → (감기 → 유지 → 뜨기 → 쉬기) 반복 → 마무리
 # 심호흡처럼 천천히: 눈을 천천히 감고(2초) 잠시 머문 뒤(1초) 천천히 뜨고(2초) 숨을 돌린다(1초).
 # 낮은 종(감기 시작)과 높은 종(뜨기 시작) 사이는 3초이고, 한 사이클은 6초다.
-PREPARE_SECONDS = 3
-FINISH_SECONDS = 3
 CLOSE_SECONDS = 2
 HOLD_SECONDS = 1
 OPEN_SECONDS = 2
 REST_SECONDS = 1
-LOOK_AWAY_SECONDS = 20  # 깜빡임 운동 뒤에 먼 곳을 바라보는 시간 (20-20-20 규칙)
 CYCLE_SECONDS = CLOSE_SECONDS + HOLD_SECONDS + OPEN_SECONDS + REST_SECONDS
 MIN_BLINK_SECONDS = PREPARE_SECONDS + CYCLE_SECONDS + FINISH_SECONDS  # 사이클 1회
 
@@ -32,6 +40,7 @@ class Phase(Enum):
     HOLD = "hold"
     OPEN = "open"
     REST = "rest"
+    TRACK = "track"  # 점 따라가기: 점을 눈으로 따라가는 중
     FINISH = "finish"
     LOOK_AWAY = "look_away"
 
@@ -42,6 +51,7 @@ MESSAGES = {
     Phase.HOLD: "감은 채 잠시 머무세요",
     Phase.OPEN: "천천히 부드럽게 뜨세요",
     Phase.REST: "",  # 쉬는 동안에는 아무 문구도 보이지 않는다
+    Phase.TRACK: "",  # 점 따라가기의 문구는 패턴마다 다르다 (DotPattern.message)
     Phase.FINISH: "잘했어요",
     Phase.LOOK_AWAY: "먼 곳을 바라보세요",
 }
@@ -53,33 +63,47 @@ SPOKEN = {
     Phase.HOLD: None,
     Phase.OPEN: "눈을 뜨세요",
     Phase.REST: None,
+    Phase.TRACK: None,  # 눈을 뜨고 점을 보는 운동이라 소리 없이 진행한다
     Phase.FINISH: "잘했어요",
     Phase.LOOK_AWAY: "이제 먼 곳을 바라보세요",
 }
 
 
 @dataclass(frozen=True)
-class BlinkStep:
+class ExerciseStep:
     phase: Phase
     message: str
-    eye_openness: float  # 1.0 = 활짝 뜸, 0.0 = 완전히 감음 (애니메이션용)
-    progress: float  # 진행 막대. 깜빡임 운동 동안 0→1로 차오르고, 먼 곳 바라보기 동안 1→0으로 줄어든다
-    finished: bool  # 깜빡임 운동이 끝났다 (기록을 남길 시점)
+    eye_openness: float | None  # 깜빡임: 1.0 = 활짝 뜸, 0.0 = 완전히 감음 (애니메이션용). 점 따라가기는 None
+    progress: float  # 진행 막대. 운동 동안 0→1로 차오르고, 먼 곳 바라보기 동안 1→0으로 줄어든다
+    finished: bool  # 운동이 끝났다 (기록을 남길 시점)
     countdown: int | None = None  # 먼 곳 바라보기의 남은 초 (20→1). 그 외에는 None
     done: bool = False  # 먼 곳 바라보기까지 모두 끝났다 (창을 닫을 시점)
+    dot: tuple[float, float] | None = None  # 점 따라가기: 점의 위치 (0~1 정규화 좌표). 그 외에는 None
+
+
+def _look_away_step(t: float, eye_openness: float | None) -> ExerciseStep:
+    message = MESSAGES[Phase.LOOK_AWAY]
+    if t >= LOOK_AWAY_SECONDS:
+        return ExerciseStep(Phase.LOOK_AWAY, message, eye_openness, 0.0, True, 0, True)
+    countdown = math.ceil(LOOK_AWAY_SECONDS - t)
+    return ExerciseStep(Phase.LOOK_AWAY, message, eye_openness, 1.0 - t / LOOK_AWAY_SECONDS, True, countdown)
+
+
+# ---- 깜빡임 운동 ----
 
 
 @dataclass(frozen=True)
 class BlinkTimeline:
+    exercise: ClassVar[str] = EXERCISE_BLINK
     total_seconds: int
     cycles: int
 
-    def step_at(self, elapsed: float) -> BlinkStep:
+    def step_at(self, elapsed: float) -> ExerciseStep:
         total = float(self.total_seconds)
         elapsed = max(0.0, elapsed)
         progress = min(1.0, elapsed / total)
         if elapsed >= total:
-            return self._look_away_step(elapsed - total)
+            return _look_away_step(elapsed - total, 1.0)
         if elapsed < PREPARE_SECONDS:
             return self._step(Phase.PREPARE, 1.0, progress)
 
@@ -102,16 +126,8 @@ class BlinkTimeline:
         return self._step(Phase.REST, 1.0, progress)
 
     @staticmethod
-    def _look_away_step(t: float) -> BlinkStep:
-        message = MESSAGES[Phase.LOOK_AWAY]
-        if t >= LOOK_AWAY_SECONDS:
-            return BlinkStep(Phase.LOOK_AWAY, message, 1.0, 0.0, True, 0, True)
-        countdown = math.ceil(LOOK_AWAY_SECONDS - t)
-        return BlinkStep(Phase.LOOK_AWAY, message, 1.0, 1.0 - t / LOOK_AWAY_SECONDS, True, countdown)
-
-    @staticmethod
-    def _step(phase: Phase, openness: float, progress: float, finished: bool = False) -> BlinkStep:
-        return BlinkStep(phase, MESSAGES[phase], openness, progress, finished)
+    def _step(phase: Phase, openness: float, progress: float) -> ExerciseStep:
+        return ExerciseStep(phase, MESSAGES[phase], openness, progress, False)
 
 
 def blink_timeline(duration_seconds: int) -> BlinkTimeline:
@@ -123,3 +139,157 @@ def blink_timeline(duration_seconds: int) -> BlinkTimeline:
     total = max(int(duration_seconds), MIN_BLINK_SECONDS)
     cycles = max(1, (total - PREPARE_SECONDS - FINISH_SECONDS) // CYCLE_SECONDS)
     return BlinkTimeline(total_seconds=total, cycles=cycles)
+
+
+# ---- 점 따라가기 ----
+# 점이 화면 안을 움직이고, 사용자는 고개를 가만히 둔 채 눈으로만 따라간다.
+# 좌표는 0~1로 정규화한다. (0, 0)은 왼쪽 위, (1, 1)은 오른쪽 아래이고 실제 크기는 화면이 곱한다.
+
+_TAU = 2 * math.pi
+DOT_CENTER = (0.5, 0.5)
+DOT_SEGMENT_SECONDS = 9.0  # 패턴 하나를 보여 주는 목표 길이
+DOT_TRANSITION_SECONDS = 1.0  # 패턴이 바뀔 때 점이 순간이동하지 않고 이어지는 시간
+MIN_DOT_SEGMENT_SECONDS = 6
+MIN_DOT_SECONDS = PREPARE_SECONDS + MIN_DOT_SEGMENT_SECONDS + FINISH_SECONDS
+# 속도: 점이 초당 도는 횟수(한 번 = 왕복 한 번 또는 한 바퀴). normal은 한 번에 5초
+DOT_SPEED_HZ = {"slow": 0.12, "normal": 0.2, "fast": 0.3}
+
+
+@dataclass(frozen=True)
+class DotPattern:
+    key: str
+    message: str
+    position: Callable[[float], tuple[float, float]]  # 지금까지 돈 횟수 u → 점의 위치. 항상 0.1~0.9 안
+
+
+def _horizontal(u: float) -> tuple[float, float]:
+    return 0.5 + 0.4 * math.sin(_TAU * u), 0.5
+
+
+def _vertical(u: float) -> tuple[float, float]:
+    return 0.5, 0.5 + 0.4 * math.sin(_TAU * u)
+
+
+def _diagonal_down(u: float) -> tuple[float, float]:  # 왼쪽 위 ↔ 오른쪽 아래
+    s = 0.4 * math.sin(_TAU * u)
+    return 0.5 + s, 0.5 + s
+
+
+def _diagonal_up(u: float) -> tuple[float, float]:  # 왼쪽 아래 ↔ 오른쪽 위
+    s = 0.4 * math.sin(_TAU * u)
+    return 0.5 + s, 0.5 - s
+
+
+def _circle(u: float) -> tuple[float, float]:
+    return 0.5 + 0.38 * math.cos(_TAU * u), 0.5 + 0.38 * math.sin(_TAU * u)
+
+
+def _figure_eight(u: float) -> tuple[float, float]:
+    return 0.5 + 0.4 * math.sin(_TAU * u), 0.5 + 0.3 * math.sin(2 * _TAU * u)
+
+
+DOT_PATTERNS = (
+    DotPattern("horizontal", "점을 좌우로 따라가세요", _horizontal),
+    DotPattern("vertical", "점을 위아래로 따라가세요", _vertical),
+    DotPattern("diagonal_down", "점을 대각선으로 따라가세요", _diagonal_down),
+    DotPattern("diagonal_up", "점을 반대 대각선으로 따라가세요", _diagonal_up),
+    DotPattern("circle", "점이 그리는 원을 따라가세요", _circle),
+    DotPattern("figure_eight", "점이 그리는 8자를 따라가세요", _figure_eight),
+)
+
+DOT_PREPARE_MESSAGE = "고개는 가만히, 눈으로만 점을 따라가세요"
+
+
+def _smoothstep(x: float) -> float:
+    x = max(0.0, min(1.0, x))
+    return x * x * (3 - 2 * x)
+
+
+def _lerp(a: tuple[float, float], b: tuple[float, float], w: float) -> tuple[float, float]:
+    return a[0] + (b[0] - a[0]) * w, a[1] + (b[1] - a[1]) * w
+
+
+@dataclass(frozen=True)
+class DotFollowTimeline:
+    exercise: ClassVar[str] = EXERCISE_DOT_FOLLOW
+    total_seconds: int
+    speed_hz: float
+    segments: int  # 보여 줄 패턴 수. 패턴이 6개보다 많이 필요하면 처음부터 다시 돈다
+
+    @property
+    def _body_end(self) -> float:
+        return self.total_seconds - FINISH_SECONDS
+
+    @property
+    def _segment_seconds(self) -> float:
+        return (self._body_end - PREPARE_SECONDS) / self.segments
+
+    def pattern_at(self, index: int) -> DotPattern:
+        return DOT_PATTERNS[index % len(DOT_PATTERNS)]
+
+    def _raw(self, index: int, t_in_segment: float) -> tuple[float, float]:
+        return self.pattern_at(index).position(self.speed_hz * t_in_segment)
+
+    def _segment_end(self, index: int) -> tuple[float, float]:
+        return self._raw(index, self._segment_seconds)
+
+    def step_at(self, elapsed: float) -> ExerciseStep:
+        total = float(self.total_seconds)
+        elapsed = max(0.0, elapsed)
+        progress = min(1.0, elapsed / total)
+        if elapsed >= total:
+            return _look_away_step(elapsed - total, None)
+        if elapsed < PREPARE_SECONDS:
+            return ExerciseStep(Phase.PREPARE, DOT_PREPARE_MESSAGE, None, progress, False, dot=DOT_CENTER)
+        if elapsed >= self._body_end:
+            # 마지막 패턴이 끝난 자리에서 가운데로 부드럽게 돌아온다
+            w = _smoothstep((elapsed - self._body_end) / DOT_TRANSITION_SECONDS)
+            dot = _lerp(self._segment_end(self.segments - 1), DOT_CENTER, w)
+            return ExerciseStep(Phase.FINISH, MESSAGES[Phase.FINISH], None, progress, False, dot=dot)
+
+        seg = self._segment_seconds
+        body_t = elapsed - PREPARE_SECONDS
+        index = min(int(body_t // seg), self.segments - 1)
+        t = body_t - index * seg
+        # 패턴이 바뀐 직후에는 앞 패턴이 끝난 자리에서 새 경로로 부드럽게 갈아탄다 (순간이동 없음)
+        start = DOT_CENTER if index == 0 else self._segment_end(index - 1)
+        dot = _lerp(start, self._raw(index, t), _smoothstep(t / DOT_TRANSITION_SECONDS))
+        return ExerciseStep(Phase.TRACK, self.pattern_at(index).message, None, progress, False, dot=dot)
+
+
+def dot_follow_timeline(duration_seconds: int, speed: str = "normal") -> DotFollowTimeline:
+    """설정된 총 시간과 속도로 타임라인을 만든다.
+
+    패턴 하나를 약 9초씩 보여 주므로 기본 60초에서는 6가지 패턴이 한 번씩 나온다.
+    총 시간이 12초보다 짧게 설정돼도 12초(패턴 1개) 아래로는 줄지 않는다.
+    """
+    total = max(int(duration_seconds), MIN_DOT_SECONDS)
+    body = total - PREPARE_SECONDS - FINISH_SECONDS
+    segments = max(1, round(body / DOT_SEGMENT_SECONDS))
+    return DotFollowTimeline(total_seconds=total, speed_hz=DOT_SPEED_HZ.get(speed, DOT_SPEED_HZ["normal"]), segments=segments)
+
+
+# ---- 운동 선택 ----
+
+
+def enabled_exercises(settings: ExercisesSettings) -> list[str]:
+    """설정에서 켜져 있는 운동을 번갈아 진행하는 순서대로 돌려준다."""
+    enabled = {EXERCISE_BLINK: settings.blink.enabled, EXERCISE_DOT_FOLLOW: settings.dot_follow.enabled}
+    return [name for name in EXERCISES if enabled[name]]
+
+
+def next_exercise(enabled: Sequence[str], last: str | None) -> str | None:
+    """마지막으로 한 운동 다음 것을 고른다. 켜진 운동을 번갈아 진행하고, 없으면 None."""
+    if not enabled:
+        return None
+    if last not in enabled:
+        return enabled[0]
+    return enabled[(enabled.index(last) + 1) % len(enabled)]
+
+
+def build_timeline(exercise: str, settings: ExercisesSettings) -> BlinkTimeline | DotFollowTimeline:
+    if exercise == EXERCISE_BLINK:
+        return blink_timeline(settings.blink.duration_seconds)
+    if exercise == EXERCISE_DOT_FOLLOW:
+        return dot_follow_timeline(settings.dot_follow.duration_seconds, settings.dot_follow.speed)
+    raise ValueError(f"알 수 없는 운동: {exercise}")

@@ -35,11 +35,6 @@ class ExercisesSettings:
 
 
 @dataclass(frozen=True)
-class CameraSettings:
-    enabled: bool = False
-
-
-@dataclass(frozen=True)
 class SoundSettings:
     enabled: bool = True  # 운동 중 음성 안내(음성이 없으면 알림음)
 
@@ -52,7 +47,6 @@ class Settings:
     idle_reset_minutes: int = 5
     exercises: ExercisesSettings = field(default_factory=ExercisesSettings)
     show_main_window_on_start: bool = False
-    camera: CameraSettings = field(default_factory=CameraSettings)
     sound: SoundSettings = field(default_factory=SoundSettings)
 
 
@@ -83,7 +77,6 @@ def settings_from_dict(data: Any) -> Settings:
     raw_ex = _as_dict(raw.get("exercises"))
     raw_blink = _as_dict(raw_ex.get("blink"))
     raw_dot = _as_dict(raw_ex.get("dot_follow"))
-    raw_camera = _as_dict(raw.get("camera"))
     raw_sound = _as_dict(raw.get("sound"))
 
     idle_reset = _int(raw.get("idle_reset_minutes"), d.idle_reset_minutes, IDLE_RESET_MINUTES_RANGE)
@@ -115,7 +108,6 @@ def settings_from_dict(data: Any) -> Settings:
             ),
         ),
         show_main_window_on_start=_bool(raw.get("show_main_window_on_start"), d.show_main_window_on_start),
-        camera=CameraSettings(enabled=_bool(raw_camera.get("enabled"), d.camera.enabled)),
         sound=SoundSettings(enabled=_bool(raw_sound.get("enabled"), d.sound.enabled)),
     )
 
@@ -139,6 +131,5 @@ def settings_to_dict(settings: Settings) -> dict:
             },
         },
         "show_main_window_on_start": settings.show_main_window_on_start,
-        "camera": {"enabled": settings.camera.enabled},
         "sound": {"enabled": settings.sound.enabled},
     }

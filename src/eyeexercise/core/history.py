@@ -78,6 +78,11 @@ class History:
     def summarize(self, tz: tzinfo | None = None) -> dict[date, DailySummary]:
         return summarize_by_day(self._events, tz)
 
+    def last_completed_exercise(self) -> str | None:
+        """가장 최근에 끝까지 마친 운동의 이름. 운동을 번갈아 고를 때 쓴다."""
+        done = [e for e in self._events if e.type == EVENT_COMPLETED and e.exercise]
+        return max(done, key=lambda e: e.ts).exercise if done else None
+
     def _append(self, event: HistoryEvent) -> None:
         self._events.append(event)
         if self._save is None:
