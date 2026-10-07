@@ -73,8 +73,14 @@ class MainWindow(QMainWindow):
         self.resize(*size)
         self.setMinimumSize(*minimum)
 
-        self.records_tab = RecordsTab(lambda: history.events if history else (), now, usage_provider=lambda: usage or UsageLog())
-        self.settings_page = SettingsPage(settings_manager or SettingsManager(Settings()))
+        manager = settings_manager or SettingsManager(Settings())
+        self.records_tab = RecordsTab(
+            lambda: history.events if history else (),
+            now,
+            usage_provider=lambda: usage or UsageLog(),
+            interval_minutes=lambda: manager.settings.interval_minutes,
+        )
+        self.settings_page = SettingsPage(manager)
         self.vision_page = VisionPage(vision_log, today=lambda: now().date())
         self._stack = QStackedWidget()
         for page in (self.records_tab, self.settings_page, self.vision_page):  # _MENU와 같은 순서

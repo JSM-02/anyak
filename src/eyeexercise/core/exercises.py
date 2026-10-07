@@ -11,7 +11,7 @@
 """
 
 import math
-from collections.abc import Callable, Sequence
+from collections.abc import Callable
 from dataclasses import dataclass
 from enum import Enum
 from typing import ClassVar
@@ -20,7 +20,6 @@ from eyeexercise.core.settings import ExercisesSettings
 
 EXERCISE_BLINK = "blink"
 EXERCISE_DOT_FOLLOW = "dot_follow"
-EXERCISES = (EXERCISE_BLINK, EXERCISE_DOT_FOLLOW)  # 번갈아 진행하는 순서
 
 PREPARE_SECONDS = 3
 FINISH_SECONDS = 3
@@ -303,29 +302,6 @@ def exercise_timeline(settings: ExercisesSettings) -> DotFollowTimeline | None:
     return dot_follow_timeline(settings.dot_follow.duration_seconds, settings.dot_follow.speed)
 
 
-def enabled_exercises(settings: ExercisesSettings) -> list[str]:
-    """설정에서 켜져 있는 운동을 번갈아 진행하는 순서대로 돌려준다."""
-    enabled = {EXERCISE_BLINK: settings.blink.enabled, EXERCISE_DOT_FOLLOW: settings.dot_follow.enabled}
-    return [name for name in EXERCISES if enabled[name]]
-
-
-def next_exercise(enabled: Sequence[str], last: str | None) -> str | None:
-    """마지막으로 한 운동 다음 것을 고른다. 켜진 운동을 번갈아 진행하고, 없으면 None."""
-    if not enabled:
-        return None
-    if last not in enabled:
-        return enabled[0]
-    return enabled[(enabled.index(last) + 1) % len(enabled)]
-
-
-def build_timeline(exercise: str, settings: ExercisesSettings) -> BlinkTimeline | DotFollowTimeline:
-    if exercise == EXERCISE_BLINK:
-        return blink_timeline(settings.blink.duration_seconds)
-    if exercise == EXERCISE_DOT_FOLLOW:
-        return dot_follow_timeline(settings.dot_follow.duration_seconds, settings.dot_follow.speed)
-    raise ValueError(f"알 수 없는 운동: {exercise}")
-
-
 # ---- 길이 프리셋 (설정 화면에서 "짧게/보통/길게"로 고른다) ----
 
 
@@ -338,9 +314,9 @@ class LengthPreset:
 
 
 LENGTH_PRESETS = (
-    LengthPreset("short", "짧게", 2, 30),
-    LengthPreset("normal", "보통", 3, 60),  # 기본값과 같다: 휴식의 깜빡임 3회(24초) + 점 따라가기 1분
-    LengthPreset("long", "길게", 5, 90),
+    LengthPreset("short", "짧게", 3, 30),
+    LengthPreset("normal", "보통", 5, 60),  # 기본값과 같다: 휴식의 깜빡임 5회(36초) + 점 따라가기 1분
+    LengthPreset("long", "길게", 10, 90),
 )
 
 

@@ -44,8 +44,14 @@ class SettingsManager:
         return unsubscribe
 
     def update(self, changes: Mapping[str, Any]) -> UpdateResult:
+        return self._replace(with_changes(self._settings, changes))
+
+    def reset(self) -> UpdateResult:
+        """모든 설정을 기본값으로 되돌린다. 기록(운동·스크린 타임·시력)은 설정이 아니라서 그대로 남는다."""
+        return self._replace(Settings())
+
+    def _replace(self, new: Settings) -> UpdateResult:
         old = self._settings
-        new = with_changes(old, changes)
         if new == old:
             return UpdateResult(old, changed=False, saved=True)
         self._settings = new

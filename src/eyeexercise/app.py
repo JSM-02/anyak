@@ -8,8 +8,9 @@ from PySide6.QtCore import QTimer
 from PySide6.QtWidgets import QApplication, QSystemTrayIcon
 
 from eyeexercise.core.clock import SystemClock
-from eyeexercise.core.exercises import build_timeline, enabled_exercises, next_exercise
-from eyeexercise.core.history import History
+from eyeexercise.core.exercises import exercise_timeline, rest_timeline
+from eyeexercise.core.history import ACTIVITY_EXERCISE, History
+from eyeexercise.core.offer import exercises_done_today, should_offer_exercise
 from eyeexercise.core.scheduler import ReminderScheduler, State
 from eyeexercise.core.settings import Settings
 from eyeexercise.core.settings_manager import SettingsManager
@@ -71,15 +72,16 @@ class TrayApp:
         )
         self.tray = TrayIcon(self.controller, app_icon())
 
-        self.controller.reminder_due.connect(self.popup.show_at_corner)
+        self.controller.reminder_due.connect(self._on_reminder_due)
         self.controller.state_changed.connect(self._on_state_changed)
         self.controller.history_changed.connect(self.main_window.records_tab.refresh)
-        self.controller.exercise_started.connect(self._on_exercise_started)
+        self.controller.activity_started.connect(self._on_activity_started)
 
         self.exercise_window.completed.connect(self.controller.complete_exercise)
         self.exercise_window.aborted.connect(self.controller.abort_exercise)
 
-        self.popup.start_clicked.connect(self.controller.start_exercise)
+        self.popup.start_clicked.connect(self.controller.start_rest)
+        self.popup.exercise_clicked.connect(self.controller.start_exercise)
         self.popup.snooze_clicked.connect(self.controller.snooze)
         self.popup.skip_clicked.connect(self.controller.skip)
 
@@ -120,15 +122,24 @@ class TrayApp:
         if state is not State.DUE:
             self.popup.hide()
 
-    def _on_exercise_started(self) -> None:
-        # 켜진 운동을 번갈아 진행한다. 마지막으로 마친 운동의 다음 것을 고른다.
+    def _on_reminder_due(self) -> None:
+        # 휴식 알림 때, 오늘 운동 목표를 아직 못 채웠으면 '운동도 할래요?'를 함께 보여 준다.
         exercises = self._settings.exercises
-        choice = next_exercise(enabled_exercises(exercises), self.history.last_completed_exercise())
-        if choice is None:
-            self.tray.show_message("사용할 수 있는 운동이 없어요. 설정에서 운동을 하나 이상 켜 주세요.")
+        now = SystemClock().now()
+        if should_offer_exercise(self.history.events, now, exercises):
+            self.popup.set_exercise_offer(exercises_done_today(self.history.events, now), exercises.daily_goal)
+        else:
+            self.popup.set_exercise_offer(None, 0)
+        self.popup.show_at_corner()
+
+    def _on_activity_started(self, activity: str) -> None:
+        exercises = self._settings.exercises
+        timeline = exercise_timeline(exercises) if activity == ACTIVITY_EXERCISE else rest_timeline(exercises)
+        if timeline is None:
+            self.tray.show_message("점 따라가기가 꺼져 있어요. 설정에서 켜 주세요.")
             self.controller.abort_exercise()
             return
-        self.exercise_window.start(build_timeline(choice, exercises))
+        self.exercise_window.start(timeline)
 
     def _on_hidden_to_tray(self) -> None:
         # 창이 사라져서 당황하지 않도록, 실행 중 처음 한 번만 알려준다.

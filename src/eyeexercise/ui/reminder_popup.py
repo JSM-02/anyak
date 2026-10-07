@@ -24,6 +24,8 @@ _STYLE = """
 }
 #popup QPushButton:hover { background: $hover; }
 #popup QPushButton#primary { color: $on_accent; background: $accent; border: 1px solid $accent; }
+#popup QPushButton#offer { color: $text; background: $accent_soft; border: 1px solid $accent; font-weight: bold; }
+#popup QPushButton#offer:hover { background: $hover; }
 #popup QPushButton#primary:hover { background: $accent_hover; border: 1px solid $accent_hover; }
 """
 
@@ -32,6 +34,7 @@ class ReminderPopup(QWidget):
     start_clicked = Signal()
     snooze_clicked = Signal()
     skip_clicked = Signal()
+    exercise_clicked = Signal()  # '운동도 할래요?'
 
     def __init__(self, snooze_minutes: int) -> None:
         super().__init__(
@@ -49,9 +52,9 @@ class ReminderPopup(QWidget):
             _ICON_PX, _ICON_PX, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation
         ))
         icon.setFixedSize(_ICON_PX, _ICON_PX)
-        title = QLabel("눈 운동 시간이에요")
+        title = QLabel("눈 쉬는 시간이에요")
         title.setObjectName("title")
-        body = QLabel("잠깐 화면에서 눈을 떼고\n운동해 볼까요?")
+        body = QLabel("잠깐 화면에서 눈을 떼고\n눈을 쉬게 해 볼까요?")
         body.setObjectName("message")
 
         start = QPushButton("시작")
@@ -63,6 +66,10 @@ class ReminderPopup(QWidget):
         start.clicked.connect(self.start_clicked)
         snooze.clicked.connect(self.snooze_clicked)
         skip.clicked.connect(self.skip_clicked)
+        self._exercise_button = QPushButton()
+        self._exercise_button.setObjectName("offer")
+        self._exercise_button.clicked.connect(self.exercise_clicked)
+        self._exercise_button.hide()
 
         buttons = QHBoxLayout()
         buttons.addWidget(start)
@@ -83,6 +90,7 @@ class ReminderPopup(QWidget):
         layout.setSpacing(12)
         layout.addLayout(header)
         layout.addLayout(buttons)
+        layout.addWidget(self._exercise_button)
 
         # 나타날 때: 투명에서 선명하게, 아래에서 살짝 위로. 갑자기 튀어나오지 않아 덜 거슬린다
         self._fade = QPropertyAnimation(self, b"windowOpacity")
@@ -95,6 +103,14 @@ class ReminderPopup(QWidget):
         self._appear = QParallelAnimationGroup(self)
         self._appear.addAnimation(self._fade)
         self._appear.addAnimation(self._slide)
+
+    def set_exercise_offer(self, done: int | None, goal: int) -> None:
+        """'운동도 할래요? (오늘 1/2)' 버튼을 보이거나 숨긴다. done이 None이면 숨긴다 (목표를 채웠거나 운동이 꺼져 있을 때)."""
+        if done is None:
+            self._exercise_button.hide()
+            return
+        self._exercise_button.setText(f"운동도 할래요? (오늘 {done}/{goal})")
+        self._exercise_button.show()
 
     def set_snooze_minutes(self, minutes: int) -> None:
         """설정에서 미루기 시간을 바꾸면 버튼 글자도 바꾼다."""

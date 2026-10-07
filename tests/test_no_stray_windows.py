@@ -66,7 +66,7 @@ def test_기록_탭을_만들고_넘겨_보는_동안_작은_창이_뜨지_않�
     usage = UsageLog()
     usage.add(now, 600)
     tab = RecordsTab(lambda: events, now=lambda: now, tz=kst, usage_provider=lambda: usage)
-    for mode in (Mode.SCREEN_TIME, Mode.EXERCISE):
+    for mode in (Mode.SCREEN_TIME, Mode.REST):
         tab.set_mode(mode)
         for period in (Period.DAY, Period.MONTH, Period.WEEK):
             tab.set_period(period)

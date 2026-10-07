@@ -65,3 +65,15 @@ def test_메인_창은_현재_화면에_맞는_크기로_만들어진다(qapp):
     area = QGuiApplication.primaryScreen().availableGeometry()
     window = MainWindow()
     assert window.width() <= area.width() and window.height() <= area.height()
+
+
+def test_기록_탭은_설정의_휴식_주기를_따라간다(qapp):
+    from eyeexercise.core.settings import Settings
+    from eyeexercise.core.settings_manager import SettingsManager
+
+    manager = SettingsManager(Settings())
+    window = MainWindow(settings_manager=manager)
+    assert window.records_tab._interval_minutes() == 20
+    manager.update({"interval_minutes": 45})
+    assert window.records_tab._interval_minutes() == 45  # 휴식 달성률의 권장 횟수가 새 주기를 쓴다
+    assert MainWindow().records_tab._interval_minutes() == 20  # 설정이 없으면 기본 주기

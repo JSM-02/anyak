@@ -12,15 +12,15 @@ INTERVAL_MINUTES_RANGE = (1, 120)
 SNOOZE_MINUTES_RANGE = (1, 60)
 IDLE_PAUSE_MINUTES_RANGE = (1, 59)
 IDLE_RESET_MINUTES_RANGE = (2, 120)
-BLINK_SECONDS_RANGE = (5, 300)
-DOT_FOLLOW_SECONDS_RANGE = (10, 600)
+BLINK_SECONDS_RANGE = (12, 96)  # 깜빡임 1~15회 (준비 3 + 사이클 6초 × 횟수 + 마무리 3)
+DOT_FOLLOW_SECONDS_RANGE = (10, 120)  # 10초~2분
 DAILY_GOAL_RANGE = (0, 5)  # 하루 눈 운동 목표 횟수. 0이면 운동을 제안하지 않는다
 
 
 @dataclass(frozen=True)
 class BlinkSettings:
     enabled: bool = True
-    duration_seconds: int = 24  # 준비 3 + 사이클 3회(6초씩) + 마무리 3. 눈 '휴식'의 깜빡임 부분이다
+    duration_seconds: int = 36  # 준비 3 + 사이클 5회(6초씩) + 마무리 3. 눈 '휴식'의 깜빡임 부분이다
 
 
 @dataclass(frozen=True)
@@ -52,7 +52,7 @@ class Settings:
     idle_pause_minutes: int = 1
     idle_reset_minutes: int = 5
     exercises: ExercisesSettings = field(default_factory=ExercisesSettings)
-    show_main_window_on_start: bool = False
+    show_main_window_on_start: bool = True
     sound: SoundSettings = field(default_factory=SoundSettings)
     appearance: str = "system"
 

@@ -1,4 +1,4 @@
-"""운동 창. 타임라인(core/exercises)이 계산한 값을 그리기만 한다. 깜빡임 운동과 점 따라가기를 모두 띄운다."""
+"""눈 휴식·눈 운동 창. 타임라인(core/exercises)이 계산한 값을 그리기만 한다. 휴식(깜빡임 + 먼 곳 바라보기)과 운동(점 따라가기)을 모두 띄운다."""
 
 from PySide6.QtCore import QElapsedTimer, QPointF, QRect, QRectF, Qt, QTimer, Signal
 from PySide6.QtGui import QCloseEvent, QColor, QCursor, QGuiApplication, QKeyEvent, QPainter, QPainterPath, QPen
@@ -10,6 +10,7 @@ from eyeexercise.core.exercises import (
     BlinkTimeline,
     DotFollowTimeline,
     ExerciseStep,
+    LookAwayTimeline,
     Phase,
 )
 from eyeexercise.ui import theme
@@ -36,6 +37,7 @@ _STYLE = """
 #exercise { background: $surface; border: 1px solid $border_strong; border-radius: 10px; }
 #exercise QLabel { color: $text; }
 #message { font-size: $fs_title; font-weight: bold; }
+#tag { background: $chip; color: $text_body; border-radius: 10px; padding: 4px 12px; font-size: $fs_caption; font-weight: bold; }
 #hint { color: $text_secondary; font-size: $fs_caption; }
 #exercise QProgressBar {
     background: $hover; border: none; border-radius: 4px; max-height: 8px; min-height: 8px;
@@ -173,7 +175,7 @@ class ExerciseWindow(QWidget):
 
         self._speaker = speaker
         self._last_phase: Phase | None = None
-        self._timeline: BlinkTimeline | DotFollowTimeline | None = None
+        self._timeline: BlinkTimeline | LookAwayTimeline | DotFollowTimeline | None = None
         self._running = False  # 중단할 수 있는 상태 (운동이 끝나기 전)
         self._look_away_layout = False  # 점 따라가기에서 먼 곳 보기 화면(깜빡임과 같은 모양)으로 바꿨는지
         self._elapsed = QElapsedTimer()
@@ -184,6 +186,8 @@ class ExerciseWindow(QWidget):
 
         self._eye = EyeWidget()
         self._dots = DotCanvas()
+        self._tag = QLabel()  # '눈 휴식' / '눈 운동'
+        self._tag.setObjectName("tag")
         self._message = QLabel()
         self._message.setObjectName("message")
         self._message.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -206,6 +210,7 @@ class ExerciseWindow(QWidget):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(28, 20, 28, 16)
         layout.setSpacing(12)
+        layout.addWidget(self._tag, alignment=Qt.AlignmentFlag.AlignLeft)
         layout.addWidget(self._eye, stretch=1)
         layout.addWidget(self._dots, stretch=1)
         layout.addWidget(self._message)
@@ -223,10 +228,12 @@ class ExerciseWindow(QWidget):
     def running(self) -> bool:
         return self._running
 
-    def start(self, timeline: BlinkTimeline | DotFollowTimeline) -> None:
-        """운동을 시작한다. 마우스 커서가 있는 모니터의 가운데에 띄운다."""
+    def start(self, timeline: BlinkTimeline | LookAwayTimeline | DotFollowTimeline) -> None:
+        """눈 휴식(깜빡임 + 먼 곳 바라보기) 또는 눈 운동(점 따라가기)을 시작한다. 마우스 커서가 있는 모니터의 가운데에 띄운다."""
         self._timeline = timeline
         is_blink = timeline.exercise == EXERCISE_BLINK
+        self._tag.setText("눈 휴식" if is_blink else "눈 운동")
+        self._eye.set_openness(1.0)
         self._eye.setVisible(is_blink)
         self._dots.setVisible(not is_blink)
         self._look_away_layout = False

@@ -19,10 +19,10 @@ def phase_at(timeline, t):
     return timeline.step_at(t).phase
 
 
-def test_기본값은_휴식용_깜빡임_3회():
+def test_기본값은_휴식용_깜빡임_5회():
     default = Settings().exercises.blink.duration_seconds
     t = blink_timeline(default)
-    assert (default, t.total_seconds, t.cycles) == (24, 24, 3)  # 20분마다 하는 휴식이라 짧다
+    assert (default, t.total_seconds, t.cycles) == (36, 36, 5)  # 20분마다 하는 휴식이라 짧다
 
 
 def test_사이클은_6초():
@@ -228,10 +228,10 @@ def test_휴식은_깜빡임_뒤에_먼_곳_바라보기가_이어진다():
     from eyeexercise.core.exercises import rest_timeline
 
     t = rest_timeline(Settings().exercises)
-    assert (t.total_seconds, t.cycles) == (24, 3)
+    assert (t.total_seconds, t.cycles) == (36, 5)
     assert t.step_at(10).phase is not Phase.LOOK_AWAY
-    assert t.step_at(24 + 0.5).phase is Phase.LOOK_AWAY and t.step_at(24.5).finished
-    assert t.step_at(24 + LOOK_AWAY_SECONDS).done  # 24 + 20초 = 약 44초 뒤에 끝난다
+    assert t.step_at(36 + 0.5).phase is Phase.LOOK_AWAY and t.step_at(36.5).finished
+    assert t.step_at(36 + LOOK_AWAY_SECONDS).done  # 36 + 20초 = 56초 뒤에 끝난다
 
 
 def test_깜빡임을_끄면_먼_곳_바라보기만_한다():

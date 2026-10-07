@@ -7,7 +7,7 @@ from datetime import datetime
 from PySide6.QtCore import QObject, QTimer, Signal
 
 from eyeexercise.core.clock import SystemClock
-from eyeexercise.core.history import History
+from eyeexercise.core.history import ACTIVITY_EXERCISE, ACTIVITY_REST, History
 from eyeexercise.core.scheduler import InvalidTransition, ReminderDue, ReminderScheduler, State
 from eyeexercise.core.settings import Settings
 from eyeexercise.core.usage import UsageTracker
@@ -20,7 +20,7 @@ TICK_INTERVAL_MS = 1000
 class Controller(QObject):
     state_changed = Signal(object)  # State
     reminder_due = Signal()
-    exercise_started = Signal()
+    activity_started = Signal(str)  # 눈 휴식(ACTIVITY_REST) 또는 눈 운동(ACTIVITY_EXERCISE)을 시작했다
     ticked = Signal()
     history_changed = Signal()  # 기록이 추가됐다 (기록 화면을 새로 그린다)
 
@@ -37,6 +37,7 @@ class Controller(QObject):
         self._history = history
         self._usage = usage_tracker
         self._now = now
+        self._activity: str | None = None
         self._timer = QTimer(self)
         self._timer.setInterval(TICK_INTERVAL_MS)
         self._timer.timeout.connect(self._on_tick)
@@ -44,6 +45,11 @@ class Controller(QObject):
     @property
     def state(self) -> State:
         return self._scheduler.state
+
+    @property
+    def activity(self) -> str | None:
+        """지금 하는 활동(휴식/운동). 하는 중이 아니면 None."""
+        return self._activity
 
     @property
     def remaining_seconds(self) -> float | None:
@@ -77,18 +83,29 @@ class Controller(QObject):
             self._history.record_skipped(self._now())
             self.history_changed.emit()
 
+    def start_rest(self) -> None:
+        """눈 휴식을 시작한다 (알림의 [시작], 트레이의 '지금 휴식')."""
+        self._start(ACTIVITY_REST)
+
     def start_exercise(self) -> None:
+        """눈 운동(점 따라가기)을 시작한다 ('운동도 할래요?', 트레이의 '지금 운동')."""
+        self._start(ACTIVITY_EXERCISE)
+
+    def _start(self, activity: str) -> None:
         if self._run(self._scheduler.start_exercise):
-            self.exercise_started.emit()
+            self._activity = activity
+            self.activity_started.emit(activity)
 
     def complete_exercise(self, exercise: str, duration_seconds: int) -> None:
-        """운동을 끝까지 마쳤다. 기록을 남기고 타이머를 처음부터 다시 센다."""
+        """휴식·운동을 끝까지 마쳤다. 기록을 남기고 타이머를 처음부터 다시 센다."""
+        self._activity = None
         if self._run(self._scheduler.finish_exercise) and self._history:
             self._history.record_completed(self._now(), exercise, duration_seconds)
             self.history_changed.emit()
 
     def abort_exercise(self) -> None:
-        """운동을 중단했다. 기록은 남기지 않고 타이머만 처음부터 다시 센다."""
+        """휴식·운동을 중단했다. 기록은 남기지 않고 타이머만 처음부터 다시 센다."""
+        self._activity = None
         self._run(self._scheduler.finish_exercise)
 
     def pause(self) -> None:

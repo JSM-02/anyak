@@ -186,32 +186,6 @@ def test_불가능한_요청은_기록하지_않는다(qapp):
 # ---- 마지막으로 완료한 운동 (운동을 번갈아 고를 때 쓴다) ----
 
 
-def test_완료한_운동이_없으면_None():
-    assert History().last_completed_exercise() is None
-    h = History()
-    h.record_skipped(kst(2026, 10, 6, 9, 0))
-    h.record_snoozed(kst(2026, 10, 6, 9, 5))
-    assert h.last_completed_exercise() is None  # 건너뛰거나 미룬 것은 운동으로 치지 않는다
-
-
-def test_가장_최근에_완료한_운동을_돌려준다():
-    h = History()
-    h.record_completed(kst(2026, 10, 6, 9, 0), "blink", 66)
-    h.record_completed(kst(2026, 10, 6, 10, 0), "dot_follow", 60)
-    h.record_skipped(kst(2026, 10, 6, 11, 0))
-    assert h.last_completed_exercise() == "dot_follow"
-
-
-def test_기록_순서가_아니라_시각이_가장_늦은_것을_기준으로_한다():
-    h = History(
-        [
-            HistoryEvent(kst(2026, 10, 6, 12, 0), "completed", "dot_follow", 60),
-            HistoryEvent(kst(2026, 10, 6, 9, 0), "completed", "blink", 66),
-        ]
-    )
-    assert h.last_completed_exercise() == "dot_follow"
-
-
 # ---- 휴식·운동 구분 (7.6a) ----
 
 

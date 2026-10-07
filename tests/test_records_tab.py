@@ -12,7 +12,7 @@ from eyeexercise.core.settings import Settings
 from eyeexercise.core.stats import Period
 from eyeexercise.ui.controller import Controller
 from eyeexercise.ui.main_window import MainWindow
-from eyeexercise.ui.records_tab import RECENT_COLLAPSED, RECENT_EXPANDED, BarChart, RecordsTab
+from eyeexercise.ui.records_tab import RECENT_COLLAPSED, RECENT_EXPANDED, BarChart, Mode, RecordsTab
 
 KST = timezone(timedelta(hours=9))
 NOW = datetime(2026, 10, 7, 14, 30, tzinfo=KST)  # 수요일. 이번 주는 10/5(월) ~ 10/11(일)
@@ -90,7 +90,7 @@ def test_기록이_없어도_정상적으로_보인다(qapp):
     assert tab._caption.text() == "10월 5일 – 10월 11일"
     assert tab._chart.axis_max == 4
     assert tab._timeline._empty_text == "아직 기록이 없어요" and all(d.is_empty for d in tab._timeline._days)
-    assert [v.text() for v in tab._highlight_values] == ["0.0회", "0초", "0회"]
+    assert [v.text() for v in tab._highlight_values] == ["0.0회", "0회", "0회"]
 
 
 def test_이번_주가_기본이고_일_주_월_버튼이_있다(qapp):
@@ -105,13 +105,13 @@ def test_이번_주가_기본이고_일_주_월_버튼이_있다(qapp):
 
 
 def test_큰_숫자와_하이라이트가_기록을_반영한다(qapp):
-    events = [done(at(10, 5)), done(at(10, 6), "dot_follow", 60), done(at(10, 7, 9)), HistoryEvent(at(10, 7, 10), "skipped")]
+    events = [done(at(10, 5)), done(at(10, 6), "blink", 60), done(at(10, 7, 9)), HistoryEvent(at(10, 7, 10), "skipped", activity="rest")]
     tab, _ = make_tab(qapp, events)
     assert count_in_header(tab) == 3
     labels = [lbl.text() for lbl in tab._highlight_labels]
     values = [v.text() for v in tab._highlight_values]
-    assert labels == ["하루 평균", "운동 시간", "건너뜀"]
-    assert values == ["1.0회", "3분 12초", "1회"]
+    assert labels == ["하루 평균", "건너뜀", "미룸"]
+    assert values == ["1.0회", "1회", "0회"]
 
 
 def test_기간을_바꾸면_막대_수와_제목이_바뀐다(qapp):
@@ -121,7 +121,7 @@ def test_기간을_바꾸면_막대_수와_제목이_바뀐다(qapp):
     assert len(tab._chart._buckets) == 24
     assert tab._caption.text() == "2026년 10월 7일 수요일"
     assert count_in_header(tab) == 2
-    assert [lbl.text() for lbl in tab._highlight_labels] == ["운동 시간", "건너뜀", "미룸"]
+    assert [lbl.text() for lbl in tab._highlight_labels] == ["건너뜀", "미룸", "쉰 시간대"]
     tab.set_period(Period.MONTH)
     assert tab._nav_title.text() == "이번 달"
     assert len(tab._chart._buckets) == 31
@@ -186,12 +186,12 @@ def test_월_이동은_해를_넘어간다(qapp):
 
 
 def test_막대를_누르면_그_막대의_값을_크게_보여_준다(qapp):
-    events = [done(at(10, 5)), done(at(10, 5, 15), "dot_follow", 60), done(at(10, 7))]
+    events = [done(at(10, 5)), done(at(10, 5, 15), "blink", 60), done(at(10, 7))]
     tab, _ = make_tab(qapp, events)
     click_bar(tab, 0)  # 월요일
     assert tab._kicker.text() == "10월 5일 (월)"
     assert count_in_header(tab) == 2
-    assert tab._caption.text() == "운동 시간 2분 6초"
+    assert tab._caption.text() == ""  # 건너뜀·미룸이 없으면 보조 문구도 없다
     assert tab._chart._selected == 0
 
 
@@ -200,7 +200,7 @@ def test_같은_막대를_다시_누르면_선택이_풀린다(qapp):
     click_bar(tab, 0)
     click_bar(tab, 0)
     assert tab._chart._selected == -1
-    assert tab._kicker.text() == "완료한 운동" and tab._caption.text() == "10월 5일 – 10월 11일"
+    assert tab._kicker.text() == "눈 휴식" and tab._caption.text() == "10월 5일 – 10월 11일"
 
 
 def test_다른_막대를_누르면_선택이_옮겨간다(qapp):
@@ -214,7 +214,7 @@ def test_기록이_없는_막대도_선택할_수_있다(qapp):
     tab, _ = make_tab(qapp, [done(at(10, 5))])
     click_bar(tab, 1)  # 화요일: 기록 없음
     assert tab._chart._selected == 1
-    assert count_in_header(tab) == 0 and tab._caption.text() == "완료한 운동 없음"
+    assert count_in_header(tab) == 0 and tab._caption.text() == "휴식 기록 없음"
 
 
 def test_아직_오지_않은_날은_선택할_수_없다(qapp):
@@ -266,13 +266,13 @@ def test_막대_위치로_번호를_찾는다(qapp):
 
 
 def test_하루_흐름은_오늘부터_날짜별_한_줄이다(qapp):
-    events = [done(at(10, 7, 9)), done(at(10, 7, 14)), HistoryEvent(at(10, 6, 12), "skipped")]
+    events = [done(at(10, 7, 9)), done(at(10, 7, 14)), HistoryEvent(at(10, 6, 12), "skipped", activity="rest")]
     tab, _ = make_tab(qapp, events)
     assert tab._section.text() == "하루 흐름"
     titles = [t for t, _ in day_marks(tab)]
     assert len(titles) == RECENT_COLLAPSED == 7
     assert titles[:2] == ["오늘", "어제"]
-    assert marked_days(tab) == [("오늘", ["09:00 깜빡임 완료 · 1분 6초", "14:00 깜빡임 완료 · 1분 6초"]), ("어제", ["12:00 건너뜀"])]
+    assert marked_days(tab) == [("오늘", ["09:00 눈 휴식 · 1분 6초", "14:00 눈 휴식 · 1분 6초"]), ("어제", ["12:00 건너뜀"])]
     assert clocks(tab) == ["14:00", "09:00", "12:00"]
 
 
@@ -310,17 +310,17 @@ def test_칸은_시간대에_맞는_가로_위치에_있다(qapp):
 
 
 def test_칸에_마우스를_올리면_그_시간대의_설명이_뜬다(qapp):
-    events = [done(at(10, 7, 14, 32), "dot_follow", 60), done(at(10, 7, 14, 50), "blink", 66), HistoryEvent(at(10, 7, 9, 0), "skipped")]
+    events = [done(at(10, 7, 14, 32), "dot_follow", 60), done(at(10, 7, 14, 50), "blink", 66), HistoryEvent(at(10, 7, 9, 0), "skipped", activity="rest")]
     tab, _ = make_tab(qapp, events)
     chart = tab._timeline
-    assert chart.tip_at(chart.cell_rect(0, 14).center()) == "14시대\n14:32 점 따라가기 완료 · 1분\n14:50 깜빡임 완료 · 1분 6초"
-    assert chart.tip_at(chart.cell_rect(0, 9).center()) == "9시대\n09:00 건너뜀"
+    assert chart.tip_at(chart.cell_rect(0, 14).center()) == "14:32 점 따라가기 · 1분\n14:50 눈 휴식 · 1분 6초"
+    assert chart.tip_at(chart.cell_rect(0, 9).center()) == "09:00 건너뜀"
     assert chart.tip_at(chart.cell_rect(0, 11).center()) == ""  # 아무것도 없는 시간대
     assert chart.tip_at(QPointF(5, 5)) == ""  # 격자 밖
 
 
 def test_같은_시간대의_운동은_한_칸에_모인다(qapp):
-    events = [done(at(10, 7, 14, 5)), done(at(10, 7, 14, 25)), HistoryEvent(at(10, 7, 14, 45), "skipped"), done(at(10, 7, 15, 0))]
+    events = [done(at(10, 7, 14, 5)), done(at(10, 7, 14, 25)), HistoryEvent(at(10, 7, 14, 45), "skipped", activity="rest"), done(at(10, 7, 15, 0))]
     tab, _ = make_tab(qapp, events)
     today = tab._timeline._days[0]
     assert [m.kind for m in today.hour_marks(14)] == ["completed", "completed", "skipped"]
@@ -329,12 +329,17 @@ def test_같은_시간대의_운동은_한_칸에_모인다(qapp):
 
 
 def test_하루_흐름이_실제로_그려진다(qapp):
-    """칸 색(스크린 타임), 완료 횟수 글자, 건너뜀 점이 픽셀로 나타나는지 본다."""
+    """칸 색(스크린 타임)과 눈 운동 횟수 글자가 픽셀로 나타나고, 휴식·건너뜀·미룸은 칸에 그려지지 않는지 본다."""
     from eyeexercise.core.usage import UsageLog
 
     usage = UsageLog()
     usage.add(NOW.replace(hour=9, minute=30), 3000)
-    events = [done(at(10, 7, 14, 0), "blink"), HistoryEvent(at(10, 7, 11, 10), "skipped"), HistoryEvent(at(10, 7, 11, 20), "snoozed")]
+    events = [
+        done(at(10, 7, 14, 0), "dot_follow", 60),
+        done(at(10, 7, 16, 0), "blink"),
+        HistoryEvent(at(10, 7, 11, 10), "skipped", activity="rest"),
+        HistoryEvent(at(10, 7, 11, 20), "snoozed", activity="rest"),
+    ]
     tab = RecordsTab(Source(events), now=lambda: NOW, tz=KST, usage_provider=lambda: usage)
     tab.resize(900, 900)
     tab.show()
@@ -348,7 +353,7 @@ def test_하루_흐름이_실제로_그려진다(qapp):
     empty = chart.cell_rect(0, 7)
     assert image.pixelColor(int(empty.left()) + 3, int(empty.bottom()) - 3).name() == "#f1f3f4"  # 쓰지 않은 시간은 빈 칸
 
-    done_cell = chart.cell_rect(0, 14)  # 완료 1회: 칸 가운데에 숫자 "1"이 그려진다
+    done_cell = chart.cell_rect(0, 14)  # 눈 운동 1회: 칸 가운데에 숫자 "1"이 그려진다
     dark = sum(
         1
         for x in range(int(done_cell.left()), int(done_cell.right()))
@@ -357,10 +362,12 @@ def test_하루_흐름이_실제로_그려진다(qapp):
     )
     assert dark > 5
 
-    both = chart.cell_rect(0, 11)  # 건너뜀(회색)과 미룸(주황) 점이 귀퉁이에 나란히
-    skipped = image.pixelColor(int(both.right() - 4), int(both.top() + 4))
-    snoozed = image.pixelColor(int(both.right() - 11), int(both.top() + 4))
-    assert skipped.name() == "#9aa0a6" and snoozed.name() == "#f9ab00"
+    rest_cell = chart.cell_rect(0, 16)  # 눈 휴식은 칸에 숫자를 쓰지 않는다 (20분마다라 너무 많아진다)
+    flat = {image.pixelColor(x, y).name() for x in range(int(rest_cell.left()) + 2, int(rest_cell.right()) - 2) for y in range(int(rest_cell.top()) + 2, int(rest_cell.bottom()) - 2)}
+    assert flat == {"#f1f3f4"}
+    skipped_cell = chart.cell_rect(0, 11)  # 건너뜀·미룸도 칸 귀퉁이에 점을 그리지 않는다 (줄 오른쪽 요약과 마우스 설명으로만)
+    corner = image.pixelColor(int(skipped_cell.right() - 4), int(skipped_cell.top() + 4))
+    assert corner.name() == "#f1f3f4"
 
 
 def test_기간과_상관없이_하루_흐름은_그대로다(qapp):
@@ -514,3 +521,84 @@ def test_가로축은_이른_기록이_있으면_그_시각부터_보인다(qapp
     chart = tab._timeline
     assert chart._start_hour == 0
     assert chart.cell_rect(0, 0).left() == pytest.approx(chart.grid_rect().left() + chart._CELL_GAP / 2)
+
+
+# ---- 눈 휴식 / 눈 운동 / 스크린 타임 전환 (7.6c) ----
+
+
+def test_구분이_없는_옛_건너뜀은_어느_화면에도_세지_않는다(qapp):
+    events = [done(at(10, 7, 9)), HistoryEvent(at(10, 7, 10), "skipped"), HistoryEvent(at(10, 7, 11), "snoozed")]
+    tab, _ = make_tab(qapp, events)
+    skipped_card = tab._highlight_values[2].text()
+    assert skipped_card == "0회"
+    assert tab._timeline._days[0].skipped == 0 and tab._timeline._days[0].snoozed == 0
+
+
+def test_하루_줄_오른쪽에_휴식_운동_건너뜀_횟수가_적힌다(qapp):
+    events = [done(at(10, 7, 9)), done(at(10, 7, 10)), done(at(10, 7, 11), "dot_follow", 60), HistoryEvent(at(10, 7, 12), "skipped", activity="rest")]
+    tab, _ = make_tab(qapp, events)
+    from eyeexercise.ui.records_tab import activity_summary
+
+    assert activity_summary(tab._timeline._days[0]) == "휴식 2회 · 운동 1회 · 건너뜀 1회"
+
+
+def test_창이_커져도_오늘_요약_카드는_내용만큼만_차지한다(qapp):
+    from PySide6.QtWidgets import QFrame
+
+    tab, _ = make_tab(qapp)
+    tab.resize(1000, 1700)
+    qapp.processEvents()
+    cards = [f for f in tab.findChildren(QFrame) if f.objectName() == "card"][:3]
+    assert all(card.height() < 150 for card in cards)
+
+
+def test_오늘_요약_세_카드는_높이가_같다(qapp):
+    from PySide6.QtWidgets import QFrame
+
+    tab, _ = make_tab(qapp, [done(at(10, 7, 9)), done(at(10, 6, 9))])
+    tab.resize(1000, 1700)
+    qapp.processEvents()
+    cards = [f for f in tab.findChildren(QFrame) if f.objectName() == "card"][:3]
+    assert len({card.height() for card in cards}) == 1
+
+
+def test_눈_휴식_화면은_휴식만_세고_눈_운동은_전환이_없다(qapp):
+    events = [done(at(10, 7, 9)), done(at(10, 7, 10)), done(at(10, 7, 11), "dot_follow", 60), done(at(10, 6, 11), "dot_follow", 60)]
+    tab, _ = make_tab(qapp, events)
+    assert [m.value for m in Mode] == ["rest", "screen_time"]  # 눈 운동 화면은 없다
+    assert tab.mode is Mode.REST and tab._kicker.text() == "눈 휴식" and count_in_header(tab) == 2  # 운동은 세지 않는다
+    assert [lbl.text() for lbl in tab._highlight_labels] == ["하루 평균", "건너뜀", "미룸"]
+    assert "시간" not in " ".join(lbl.text() for lbl in tab._highlight_labels)  # 휴식 시간·운동 시간은 보여 주지 않는다
+
+
+def test_눈_운동_횟수는_오늘_요약과_하루_흐름에서_볼_수_있다(qapp):
+    events = [done(at(10, 7, 9)), done(at(10, 7, 11), "dot_follow", 60), done(at(10, 7, 15), "dot_follow", 60)]
+    tab, _ = make_tab(qapp, events)
+    today = tab._today_cards["exercise"][0].text()
+    assert today == "2회"
+    day = tab._timeline._days[0]
+    assert (day.exercises, day.exercises_in_hour(11), day.exercises_in_hour(15)) == (2, 1, 1)
+
+
+def test_막대를_누르면_그_막대의_건너뜀과_미룸을_알려_준다(qapp):
+    events = [
+        done(at(10, 5)),
+        HistoryEvent(at(10, 5, 11), "skipped", activity="rest"),
+        HistoryEvent(at(10, 5, 12), "skipped", activity="rest"),
+        HistoryEvent(at(10, 5, 13), "snoozed", activity="rest"),
+        HistoryEvent(at(10, 7, 9), "skipped", activity="rest"),
+        done(at(10, 7, 10)),
+    ]
+    tab, _ = make_tab(qapp, events)
+    click_bar(tab, 0)  # 월요일
+    assert tab._caption.text() == "건너뜀 2회 · 미룸 1회"
+    click_bar(tab, 2)  # 수요일(오늘): 건너뜀만
+    assert tab._caption.text() == "건너뜀 1회"
+    click_bar(tab, 1)  # 화요일: 기록 없음
+    assert tab._caption.text() == "휴식 기록 없음"
+
+
+def test_하루_보기의_쉰_시간대는_휴식이_있었던_시간대_수다(qapp):
+    tab, _ = make_tab(qapp, [done(at(10, 7, 9)), done(at(10, 7, 9, 40)), done(at(10, 7, 14))])
+    tab.set_period(Period.DAY)
+    assert tab._highlight_values[2].text() == "2개"  # 9시대와 14시대

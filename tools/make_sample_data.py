@@ -1,4 +1,4 @@
-"""개발용 샘플 데이터 생성: 실제 사용한 것처럼 보이는 운동 기록(history.json)과 스크린 타임(usage.json)을 만든다.
+"""개발용 샘플 데이터 생성: 실제 사용한 것처럼 보이는 눈 휴식·눈 운동 기록(history.json)과 스크린 타임(usage.json)을 만든다.
 
 기록 탭의 하루 타임라인·차트를 눈으로 확인할 때 쓴다. 앱이 켜져 있으면 곧 메모리의 값으로 덮어쓰므로
 **앱을 종료한 뒤** 실행한다.
@@ -27,7 +27,8 @@ from eyeexercise.storage import json_store, paths  # noqa: E402
 
 REMINDER_MINUTES = 20  # 일하는 동안 알림이 오는 간격 (앱 기본값)
 SNOOZE_MINUTES = 5
-DURATIONS = {EXERCISE_BLINK: 66, EXERCISE_DOT_FOLLOW: 60}
+REST_SECONDS = 36  # 눈 휴식의 깜빡임 5회 (기본값)
+EXERCISE_SECONDS = 60  # 눈 운동(점 따라가기)
 
 
 def _sessions(day: date, rng: random.Random) -> list[tuple[int, int]]:
@@ -62,25 +63,23 @@ def _usage_hours(sessions: list[tuple[int, int]], rng: random.Random) -> list[fl
     return [min(3600.0, round(v, 1)) for v in hours]
 
 
-def _events(day: date, sessions: list[tuple[int, int]], rng: random.Random, tz, last_exercise: str) -> tuple[list[HistoryEvent], str]:
+def _events(day: date, sessions: list[tuple[int, int]], rng: random.Random, tz) -> list[HistoryEvent]:
+    """눈 휴식은 20분마다 알림에 응한 결과(완료·건너뜀·미룸)이고, 눈 운동(점 따라가기)은 하루 0~2회다."""
     events: list[HistoryEvent] = []
 
     def at(minute: float) -> datetime:
         base = datetime(day.year, day.month, day.day, tzinfo=tz)
         return base + timedelta(minutes=minute, seconds=rng.randint(0, 59))
 
-    def complete(minute: float) -> None:
-        nonlocal last_exercise
-        exercise = EXERCISE_DOT_FOLLOW if last_exercise == EXERCISE_BLINK else EXERCISE_BLINK  # 번갈아 진행한다
-        last_exercise = exercise
-        events.append(HistoryEvent(at(minute + 0.5), EVENT_COMPLETED, exercise, DURATIONS[exercise]))
+    def rest(minute: float) -> None:
+        events.append(HistoryEvent(at(minute + 0.5), EVENT_COMPLETED, EXERCISE_BLINK, REST_SECONDS))
 
     for start, end in sessions:
         t = start + REMINDER_MINUTES + rng.uniform(-3, 6)  # 시작 후 한 주기가 지나면 첫 알림
         while t < end - 2:
             roll = rng.random()
-            if roll < 0.5:
-                complete(t)
+            if roll < 0.55:
+                rest(t)
             elif roll < 0.8:
                 events.append(HistoryEvent(at(t), EVENT_SKIPPED, activity=ACTIVITY_REST))
             else:  # 미루기: 5분 뒤 다시 알림이 와서 대개 한다
@@ -88,23 +87,28 @@ def _events(day: date, sessions: list[tuple[int, int]], rng: random.Random, tz, 
                 t += SNOOZE_MINUTES
                 if t < end - 2:
                     if rng.random() < 0.65:
-                        complete(t)
+                        rest(t)
                     else:
                         events.append(HistoryEvent(at(t), EVENT_SKIPPED, activity=ACTIVITY_REST))
             t += REMINDER_MINUTES + rng.uniform(-2, 8)  # 자리를 잠깐 비우면 조금 늦어진다
-    return events, last_exercise
+
+    # 눈 운동: 하루 목표(2회) 안에서, 일한 날에만 휴식 알림 때 '운동도 할래요?'에 응한 것처럼 만든다
+    chances = [(start, end) for start, end in sessions if end - start >= 90]
+    for i, (start, end) in enumerate(chances[:2]):
+        if rng.random() < (0.85 if i == 0 else 0.55):
+            minute = rng.uniform(start + 45, end - 20)
+            events.append(HistoryEvent(at(minute), EVENT_COMPLETED, EXERCISE_DOT_FOLLOW, EXERCISE_SECONDS))
+    return events
 
 
 def build(days: int, today: date, tz, seed: int) -> tuple[list[HistoryEvent], UsageLog]:
     rng = random.Random(seed)
     events: list[HistoryEvent] = []
     usage = UsageLog()
-    last_exercise = EXERCISE_DOT_FOLLOW
     for offset in range(days, 0, -1):
         day = today - timedelta(days=offset)
         sessions = _sessions(day, rng)
-        day_events, last_exercise = _events(day, sessions, rng, tz, last_exercise)
-        events.extend(day_events)
+        events.extend(_events(day, sessions, rng, tz))
         for hour, seconds in enumerate(_usage_hours(sessions, rng)):
             if seconds > 0:
                 usage.add(datetime(day.year, day.month, day.day, hour, tzinfo=tz), seconds)

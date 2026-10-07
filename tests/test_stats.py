@@ -35,11 +35,11 @@ def done(ts, exercise="blink", seconds=66):
 
 
 def skipped(ts):
-    return HistoryEvent(ts, "skipped")
+    return HistoryEvent(ts, "skipped", activity="rest")
 
 
 def snoozed(ts):
-    return HistoryEvent(ts, "snoozed")
+    return HistoryEvent(ts, "snoozed", activity="rest")
 
 
 # ---- 기간 계산 ----
@@ -221,20 +221,20 @@ def test_기록이_없으면_모두_0():
 # ---- 하이라이트 ----
 
 
-def test_주_월_하이라이트는_평균_시간_건너뜀():
+def test_주_월_하이라이트는_평균_건너뜀_미룸():
     s = summarize_range(
         Period.WEEK, TODAY, build_buckets(Period.WEEK, TODAY, [done(at(10, 5), seconds=1260), skipped(at(10, 6))], NOW, KST), NOW, KST
     )
     cards = highlights(Period.WEEK, s)
-    assert [c.label for c in cards] == ["하루 평균", "운동 시간", "건너뜀"]
-    assert [c.value for c in cards] == ["0.3회", "21분", "1회"]
-    assert [c.label for c in highlights(Period.MONTH, s)] == ["하루 평균", "운동 시간", "건너뜀"]
+    assert [c.label for c in cards] == ["하루 평균", "건너뜀", "미룸"]  # 휴식 시간은 보여 주지 않는다
+    assert [c.value for c in cards] == ["0.3회", "1회", "0회"]
+    assert [c.label for c in highlights(Period.MONTH, s)] == ["하루 평균", "건너뜀", "미룸"]
 
 
-def test_하루_하이라이트는_시간_건너뜀_미룸():
+def test_하루_하이라이트는_건너뜀_미룸_쉰_시간대():
     buckets = build_buckets(Period.DAY, TODAY, [done(at(10, 7), seconds=66), snoozed(at(10, 7)), snoozed(at(10, 7, 13))], NOW, KST)
     cards = highlights(Period.DAY, summarize_range(Period.DAY, TODAY, buckets, NOW, KST))
-    assert [(c.label, c.value) for c in cards] == [("운동 시간", "1분 6초"), ("건너뜀", "0회"), ("미룸", "2회")]
+    assert [(c.label, c.value) for c in cards] == [("건너뜀", "0회"), ("미룸", "2회"), ("쉰 시간대", "1개")]  # 12시에 한 번 쉬었다
 
 
 # ---- 표시 형식 ----
@@ -280,14 +280,42 @@ def test_점은_시각_종류_설명을_가진다():
     assert [m.minute for m in marks] == [0, 13 * 60 + 59, 14 * 60 + 4, 14 * 60 + 32]  # 시간순
     assert [m.kind for m in marks] == ["snoozed", "skipped", "completed", "completed"]
     assert [m.exercise for m in marks] == ["", "", "blink", "dot_follow"]
-    assert [m.tip for m in marks] == ["00:00 미룸", "13:59 건너뜀", "14:04 깜빡임 완료 · 1분 6초", "14:32 점 따라가기 완료 · 1분"]
+    assert [m.activity for m in marks] == ["rest", "rest", "rest", "exercise"]
+    assert [m.tip for m in marks] == ["00:00 미룸", "13:59 건너뜀", "14:04 눈 휴식 · 1분 6초", "14:32 점 따라가기 · 1분"]
 
 
-def test_날짜마다_완료_횟수를_센다():
-    events = [done(at(10, 7, 9)), done(at(10, 7, 10)), skipped(at(10, 7, 11)), done(at(10, 6, 9))]
+def test_날짜마다_휴식_운동_건너뜀_미룸을_따로_센다():
+    events = [
+        done(at(10, 7, 9)), done(at(10, 7, 10)), done(at(10, 7, 11), "dot_follow", 60),
+        skipped(at(10, 7, 12)), skipped(at(10, 7, 13)), snoozed(at(10, 7, 14)),
+        done(at(10, 6, 9)),
+    ]
     days = timeline(events)
-    assert (days[0].completed, days[1].completed) == (2, 1)
-    assert len(days[0].marks) == 3
+    assert (days[0].rests, days[0].exercises, days[0].skipped, days[0].snoozed) == (2, 1, 2, 1)
+    assert (days[1].rests, days[1].exercises, days[1].skipped, days[1].snoozed) == (1, 0, 0, 0)
+    assert len(days[0].marks) == 6
+
+
+def test_칸의_숫자는_그_시간대에_마친_눈_운동만_센다():
+    events = [done(at(10, 7, 14, 5)), done(at(10, 7, 14, 20), "dot_follow", 60), done(at(10, 7, 14, 40), "dot_follow", 60), skipped(at(10, 7, 14, 50))]
+    today = timeline(events)[0]
+    assert today.exercises_in_hour(14) == 2  # 휴식과 건너뜀은 세지 않는다
+    assert today.exercises_in_hour(13) == 0
+
+
+def test_휴식인지_운동인지_모르는_건너뜀과_미룸은_그리지_않는다():
+    events = [HistoryEvent(at(10, 7, 9), "skipped"), HistoryEvent(at(10, 7, 10), "snoozed"), done(at(10, 7, 11))]
+    today = timeline(events)[0]
+    assert [m.kind for m in today.marks] == ["completed"] and today.skipped == today.snoozed == 0
+
+
+def test_하루_줄의_요약_문구는_휴식_운동_건너뜀_미룸을_보여_준다():
+    from eyeexercise.ui.records_tab import activity_summary
+
+    events = [done(at(10, 7, 9)), done(at(10, 7, 10)), done(at(10, 7, 11), "dot_follow", 60), skipped(at(10, 7, 12)), snoozed(at(10, 7, 13)), done(at(10, 6, 9))]
+    days = timeline(events)
+    assert activity_summary(days[0]) == "휴식 2회 · 운동 1회 · 건너뜀 1회 · 미룸 1회"
+    assert activity_summary(days[1]) == "휴식 1회 · 운동 0회"  # 건너뜀·미룸은 있을 때만
 
 
 def test_자정을_기준으로_오늘과_어제가_나뉜다():
@@ -304,12 +332,12 @@ def test_보여_주는_기간_밖의_기록은_빠진다():
 
 
 def test_모르는_운동_이름은_그대로_보여_준다():
-    assert timeline([done(at(10, 7), "jumping", 10)])[0].marks[0].tip == "12:00 jumping 완료 · 10초"
+    assert timeline([done(at(10, 7), "jumping", 10)])[0].marks[0].tip == "12:00 jumping · 10초"
 
 
 def test_완료_시간이_없으면_길이는_설명에_없다():
     events = [HistoryEvent(at(10, 7), "completed", "blink", None)]
-    assert timeline(events)[0].marks[0].tip == "12:00 깜빡임 완료"
+    assert timeline(events)[0].marks[0].tip == "12:00 눈 휴식"
 
 
 def test_모르는_종류의_이벤트는_건너뛴다():
@@ -322,8 +350,8 @@ def test_스크린_타임은_시간대별_초와_합계와_범위를_담는다()
     today = days[0]
     assert today.hours[9] == 3600 and today.hours[10] == 1800 and today.hours[18] == 120
     assert today.total_seconds == 5520
-    assert today.span == "9시~18시대"
-    assert days[1].span == "9시대"
+    assert today.span == "09:00~19:00"  # 18시대가 끝나는 19시까지
+    assert days[1].span == "09:00~10:00"
     assert not today.is_empty
 
 
@@ -332,7 +360,8 @@ def test_범위는_1분_이상_쓴_시간대만_본다():
     assert usage_span([30] + [0] * 23) == ""  # 30초는 사용으로 보지 않는다
     hours = [0.0] * 24
     hours[3], hours[4], hours[20] = 59, 60, 3600
-    assert usage_span(hours) == "4시~20시대"
+    assert usage_span(hours) == "04:00~21:00"
+    assert usage_span([0.0] * 23 + [3600.0]) == "23:00~24:00"
 
 
 def test_스크린_타임만_있어도_빈_날이_아니다():
@@ -438,11 +467,12 @@ def test_스크린_타임_하이라이트_주_월():
 
     usage = make_usage([(10, 5, 9, 3600), (10, 7, 9, 3600), (10, 7, 10, 3600)])  # 월 1시간, 수 2시간 (한 시간대는 최대 3600초)
     s = summarize_usage(Period.WEEK, TODAY, build_usage_buckets(Period.WEEK, TODAY, usage, NOW, KST), NOW, KST)
-    cards = usage_highlights(Period.WEEK, s, completed=9)
-    assert [c.label for c in cards] == ["하루 평균", "가장 많이 쓴 날", "운동 완료"]
-    assert [c.value for c in cards] == ["1시간", "2시간", "9회"]  # 3시간 / 월·화·수 3일
-    assert [c.detail for c in cards] == ["", "수요일", ""]
-    assert [c.label for c in usage_highlights(Period.MONTH, s, 0)] == ["하루 평균", "가장 많이 쓴 날", "운동 완료"]
+    rest = rs(Period.WEEK, usage, [done(at(10, 5, 9)), done(at(10, 7, 9, 30))])
+    cards = usage_highlights(Period.WEEK, s, rest)
+    assert [c.label for c in cards] == ["하루 평균", "쉬지 않고 쓴 가장 긴 시간", "휴식 달성률"]
+    assert cards[0].value == "1시간"  # 3시간 / 월·화·수 3일
+    assert cards[1].value.endswith("분") or cards[1].value.endswith("시간")
+    assert [c.label for c in usage_highlights(Period.MONTH, s, rest)] == ["하루 평균", "쉬지 않고 쓴 가장 긴 시간", "휴식 달성률"]
 
 
 def test_스크린_타임_하이라이트_하루():
@@ -450,18 +480,23 @@ def test_스크린_타임_하이라이트_하루():
 
     usage = make_usage([(10, 7, 9, 1800), (10, 7, 14, 2700)])
     s = summarize_usage(Period.DAY, TODAY, build_usage_buckets(Period.DAY, TODAY, usage, NOW, KST), NOW, KST)
-    cards = usage_highlights(Period.DAY, s, completed=3)
-    assert [(c.label, c.value, c.detail) for c in cards] == [("가장 많이 쓴 시간", "45분", "14시"), ("사용한 시간대", "2개", ""), ("운동 완료", "3회", "")]
+    cards = usage_highlights(Period.DAY, s, rs(Period.DAY, usage, []))
+    # 가장 많이 쓴 시간 14시(45분) · 쉬지 않고 쓴 가장 긴 시간(휴식이 없으니 14시대의 45분) · 사용 75분 → 권장 3회에 0회
+    assert [(c.label, c.value, c.detail) for c in cards] == [
+        ("가장 많이 쓴 시간", "45분", "14시"),
+        ("쉬지 않고 쓴 가장 긴 시간", "45분", ""),
+        ("휴식 달성률", "0%", "0회 / 권장 3회"),
+    ]
 
 
-def test_스크린_타임_사용이_없으면_가장_많은_날은_대시():
+def test_스크린_타임_사용이_없으면_카드는_대시이거나_0이다():
     from eyeexercise.core.stats import build_usage_buckets, summarize_usage, usage_highlights
     from eyeexercise.core.usage import UsageLog
 
     s = summarize_usage(Period.WEEK, TODAY, build_usage_buckets(Period.WEEK, TODAY, UsageLog(), NOW, KST), NOW, KST)
-    cards = usage_highlights(Period.WEEK, s, 0)
-    assert [c.value for c in cards] == ["0분", "–", "0회"]
-    assert [c.detail for c in cards] == ["", "", ""]
+    cards = usage_highlights(Period.WEEK, s, rs(Period.WEEK, UsageLog(), []))
+    assert [c.value for c in cards] == ["0분", "–", "–"]  # 사용이 없으면 달성률도 계산하지 않는다
+    assert [c.detail for c in cards] == ["", "", "사용 시간이 짧아요"]
 
 
 @pytest.mark.parametrize(
@@ -545,25 +580,20 @@ def test_오늘이_어제보다_많으면_많다고_알려_준다():
     events = [done(at(10, 7, 9)), done(at(10, 7, 10)), done(at(10, 7, 14)), done(at(10, 6, 9))]  # 오늘 3회(198초), 어제 1회(66초)
     c = compare(events)
     assert c.exercise_count == 3 and c.exercise_trend == "up"
-    assert c.exercise_lines == ["어제보다 2회 많아요", "운동 시간은 2분 12초 많아요"]
+    assert c.exercise_lines == ["어제보다 2회 많아요"]
 
 
 def test_오늘이_적으면_적다고_알려_준다():
     events = [done(at(10, 7, 9)), done(at(10, 6, 9)), done(at(10, 6, 10)), done(at(10, 6, 11))]
     c = compare(events)
     assert c.exercise_trend == "down"
-    assert c.exercise_lines == ["어제보다 2회 적어요", "운동 시간은 2분 12초 적어요"]
+    assert c.exercise_lines == ["어제보다 2회 적어요"]
 
 
 def test_같으면_같다고_알려_준다():
     c = compare([done(at(10, 7, 9)), done(at(10, 6, 9))])
     assert c.exercise_trend == "same"
-    assert c.exercise_lines == ["어제와 같아요", "운동 시간도 같아요"]
-
-
-def test_횟수는_같아도_운동_시간이_다르면_시간만_다르다고_알려_준다():
-    c = compare([done(at(10, 7, 9), seconds=100), done(at(10, 6, 9), seconds=66)])
-    assert c.exercise_lines == ["어제와 같아요", "운동 시간은 34초 많아요"]
+    assert c.exercise_lines == ["어제와 같아요"]
 
 
 def test_어제는_하루_전체를_센다_저녁_기록도_포함():
@@ -575,7 +605,7 @@ def test_비교는_지금_몇_시인지와_상관없다():
     events = [done(at(10, 7, 9)), done(at(10, 6, 9)), done(at(10, 6, 20))]
     morning = compare(events, now=datetime(2026, 10, 7, 9, 30, tzinfo=KST))
     night = compare(events, now=datetime(2026, 10, 7, 23, 0, tzinfo=KST))
-    assert morning.exercise_lines == night.exercise_lines == ["어제보다 1회 적어요", "운동 시간은 1분 6초 적어요"]
+    assert morning.exercise_lines == night.exercise_lines == ["어제보다 1회 적어요"]
 
 
 def test_건너뜀과_미룸은_횟수에_세지_않는다():
@@ -721,7 +751,7 @@ def test_조사는_마지막_글자의_받침에_맞춘다():
 def test_일_운동은_전날_합계와_비교한다():
     events = [done(at(10, 7, 9)), done(at(10, 7, 10)), done(at(10, 6, 9))]
     c = pc_exercise(Period.DAY, events)
-    assert c.trend == "up" and c.lines == ["어제보다 1회 많아요", "운동 시간은 1분 6초 많아요"]
+    assert c.trend == "up" and c.lines == ["어제보다 1회 많아요"]
 
 
 def test_지난_날을_보면_그_전날과_비교한다():
@@ -729,7 +759,7 @@ def test_지난_날을_보면_그_전날과_비교한다():
     c = pc_exercise(Period.DAY, events, anchor=date(2026, 10, 6))
     assert c.lines[0] == "전날보다 1회 많아요"
     same = pc_exercise(Period.DAY, [done(at(10, 6, 9)), done(at(10, 5, 9))], anchor=date(2026, 10, 6))
-    assert same.trend == "same" and same.lines == ["전날과 같아요", "운동 시간도 같아요"]
+    assert same.trend == "same" and same.lines == ["전날과 같아요"]
 
 
 def test_일_비교는_오늘_요약과_같은_결과다():
@@ -767,7 +797,7 @@ def test_주는_하루_평균끼리_비교한다_진행_중인_주도_공정하�
     events += [done(lw_at(d, 9)) for d in range(7)]
     c = pc_exercise(Period.WEEK, events)
     assert c.trend == "up"
-    assert c.lines == ["지난 주보다 하루 평균 1.0회 많아요", "운동 시간은 하루 평균 1분 6초 많아요"]
+    assert c.lines == ["지난 주보다 하루 평균 1.0회 많아요"]
 
 
 def test_주_평균이_적으면_적다고_알려_준다():
@@ -779,7 +809,7 @@ def test_주_평균이_적으면_적다고_알려_준다():
 def test_주_평균이_같으면_같다고_알려_준다():
     events = [done(at(10, 5, 9)), done(at(10, 6, 9)), done(at(10, 7, 9))] + [done(lw_at(d, 9)) for d in range(7)]  # 둘 다 하루 평균 1.0
     c = pc_exercise(Period.WEEK, events)
-    assert c.trend == "same" and c.lines == ["하루 평균이 지난 주와 같아요", "운동 시간도 같아요"]
+    assert c.trend == "same" and c.lines == ["하루 평균이 지난 주와 같아요"]
 
 
 def test_지난_주를_보면_전주와_하루_평균으로_비교한다():
@@ -872,14 +902,6 @@ def test_스크린_타임_비교_문구에는_0분이_나오지_않는다():
             assert not re.search(r"(?<!\d)0분", line), (period, seconds, line)
 
 
-def test_운동_시간_평균_차이도_실제_차이를_구한_뒤_반올림한다():
-    # 이번 달 하루 평균 10초/7일 = 1.43초, 지난 달 18초/30일 = 0.6초. 실제 차이 0.83 → 1초.
-    # 먼저 반올림하면 1초 - 1초 = 0이라 "같아요"가 나온다.
-    events = [done(at(10, d, 9), seconds=sec) for d, sec in zip(range(1, 8), (2, 2, 2, 1, 1, 1, 1), strict=True)]
-    events += [done(at(9, d, 9), seconds=1) for d in range(1, 19)]
-    assert pc_exercise(Period.MONTH, events).lines[1] == "운동 시간은 하루 평균 1초 많아요"
-
-
 # ---- 하이라이트 카드의 앞 기간 비교 ----
 
 
@@ -891,6 +913,12 @@ def us_summary(period, usage, anchor=TODAY):
     from eyeexercise.core.stats import build_usage_buckets, summarize_usage
 
     return summarize_usage(period, anchor, build_usage_buckets(period, anchor, usage, NOW, KST), NOW, KST)
+
+
+def rs(period, usage, events, anchor=TODAY, interval=20):
+    from eyeexercise.core.stats import rest_stats
+
+    return rest_stats(period, anchor, usage, events, NOW, KST, interval)
 
 
 def card_map(cards):
@@ -917,18 +945,18 @@ WEEK_CARD_EVENTS = (
 
 def test_주_카드는_하루_평균끼리_비교한다():
     cards = exercise_cards(Period.WEEK, WEEK_CARD_EVENTS)
-    assert [cards[k].value for k in ("하루 평균", "운동 시간", "건너뜀")] == ["2.0회", "6분 36초", "3회"]
+    assert [cards[k].value for k in ("하루 평균", "건너뜀", "미룸")] == ["2.0회", "3회", "0회"]
     assert (cards["하루 평균"].compare, cards["하루 평균"].trend) == ("지난 주보다 1.0회 많아요", "up")
-    assert (cards["운동 시간"].compare, cards["운동 시간"].trend) == ("지난 주보다 하루 평균 1분 6초 많아요", "up")  # 132초 - 66초
     assert (cards["건너뜀"].compare, cards["건너뜀"].trend) == ("지난 주보다 하루 평균 0.7회 많아요", "up")  # 1.0 - 0.29
+    assert (cards["미룸"].compare, cards["미룸"].trend) == ("지난 주와 같아요", "same")  # 둘 다 0
 
 
 def test_월_카드도_하루_평균끼리_비교한다():
     events = [done(at(10, d, h)) for d in range(1, 8) for h in (9, 10)] + [done(at(9, d, 9)) for d in range(1, 31)]
     cards = exercise_cards(Period.MONTH, events, label="지난 달")
     assert cards["하루 평균"].compare == "지난 달보다 1.0회 많아요"
-    assert cards["운동 시간"].compare == "지난 달보다 하루 평균 1분 6초 많아요"  # 하루 132초 vs 하루 66초
     assert cards["건너뜀"].compare == "지난 달과 같아요"  # 둘 다 0
+    assert cards["미룸"].compare == "지난 달과 같아요"
 
 
 def test_일_카드는_합계끼리_비교한다():
@@ -937,8 +965,8 @@ def test_일_카드는_합계끼리_비교한다():
         + [done(at(10, 6, 9)), skipped(at(10, 6, 10)), skipped(at(10, 6, 11)), snoozed(at(10, 6, 12))]  # 어제 완료 1회(66초), 건너뜀 2, 미룸 1
     )
     cards = exercise_cards(Period.DAY, events, label="어제")
-    assert [cards[k].value for k in ("운동 시간", "건너뜀", "미룸")] == ["2분 12초", "1회", "0회"]
-    assert (cards["운동 시간"].compare, cards["운동 시간"].trend) == ("어제보다 1분 6초 많아요", "up")
+    assert [cards[k].value for k in ("건너뜀", "미룸", "쉰 시간대")] == ["1회", "0회", "2개"]  # 9시와 10시에 쉬었다
+    assert (cards["쉰 시간대"].compare, cards["쉰 시간대"].trend) == ("어제보다 1개 많아요", "up")
     assert (cards["건너뜀"].compare, cards["건너뜀"].trend) == ("어제보다 1회 적어요", "down")
     assert (cards["미룸"].compare, cards["미룸"].trend) == ("어제보다 1회 적어요", "down")
 
@@ -946,7 +974,7 @@ def test_일_카드는_합계끼리_비교한다():
 def test_같은_값이면_같다고_알려_준다():
     events = [done(at(10, 7, 9)), skipped(at(10, 7, 10)), done(at(10, 6, 9)), skipped(at(10, 6, 10))]
     cards = exercise_cards(Period.DAY, events, label="어제")
-    assert all(cards[k].compare == "어제와 같아요" and cards[k].trend == "same" for k in ("운동 시간", "건너뜀"))
+    assert all(cards[k].compare == "어제와 같아요" and cards[k].trend == "same" for k in ("쉰 시간대", "건너뜀"))
     assert cards["미룸"].compare == "어제와 같아요"
 
 
@@ -998,9 +1026,9 @@ def usage_cards(period, entries, events=(), prev_entries=None, anchor=TODAY, lab
         usage_highlights_with_compare(
             period,
             us_summary(period, usage, anchor),
-            ex_summary(period, events, anchor),
+            rs(period, usage, events, anchor),
             us_summary(period, usage, prev_anchor),
-            ex_summary(period, events, prev_anchor),
+            rs(period, usage, events, prev_anchor),
             label,
         )
     )
@@ -1012,55 +1040,54 @@ WEEK_USAGE = [(10, 5, 9, 3600), (10, 6, 9, 3600), (10, 6, 10, 3600), (10, 7, 9, 
 
 def test_스크린_타임_주_카드_비교():
     cards = usage_cards(Period.WEEK, WEEK_USAGE, WEEK_CARD_EVENTS)
-    assert [cards[k].value for k in ("하루 평균", "가장 많이 쓴 날", "운동 완료")] == ["1시간 20분", "2시간", "6회"]
+    assert [cards[k].value for k in ("하루 평균", "쉬지 않고 쓴 가장 긴 시간", "휴식 달성률")] == ["1시간 20분", "1시간 59분", "50%"]
     assert (cards["하루 평균"].compare, cards["하루 평균"].trend) == ("지난 주보다 50분 많아요", "up")  # 80분 - 30분
-    assert (cards["가장 많이 쓴 날"].compare, cards["가장 많이 쓴 날"].trend) == ("지난 주 최고보다 1시간 30분 많아요", "up")
-    assert cards["가장 많이 쓴 날"].detail == "화요일"
-    assert (cards["운동 완료"].compare, cards["운동 완료"].trend) == ("지난 주보다 하루 평균 1.0회 많아요", "up")
+    # 화요일 9~11시를 9시 휴식 한 번만 끼고 썼다 (9시 정각에 쉬었으니 그 뒤 119분), 지난 주는 30분씩 7일이라 가장 긴 게 29분
+    assert cards["쉬지 않고 쓴 가장 긴 시간"].detail == "어제"
+    assert (cards["쉬지 않고 쓴 가장 긴 시간"].compare, cards["쉬지 않고 쓴 가장 긴 시간"].trend) == ("지난 주보다 1시간 30분 많아요", "up")
+    assert cards["휴식 달성률"].detail == "6회 / 권장 12회"  # 월 3 + 화 6 + 수 3시간대 → 권장 12회, 실제 6회
 
 
 def test_스크린_타임_일_카드_비교():
     entries = [(10, 7, 9, 3600), (10, 7, 10, 1800), (10, 6, 9, 1800)]  # 오늘 9시 1시간·10시 30분, 어제 9시 30분
     events = [done(at(10, 7, 9)), done(at(10, 7, 10)), done(at(10, 6, 9))]
     cards = usage_cards(Period.DAY, entries, events, label="어제")
-    assert [cards[k].value for k in ("가장 많이 쓴 시간", "사용한 시간대", "운동 완료")] == ["1시간", "2개", "2회"]
+    assert [cards[k].value for k in ("가장 많이 쓴 시간", "쉬지 않고 쓴 가장 긴 시간", "휴식 달성률")] == ["1시간", "59분", "50%"]
     assert cards["가장 많이 쓴 시간"].compare == "어제 최고보다 30분 많아요"
-    assert cards["사용한 시간대"].compare == "어제보다 1개 많아요"
-    assert cards["운동 완료"].compare == "어제보다 1회 많아요"
+    assert cards["쉬지 않고 쓴 가장 긴 시간"].compare == "어제보다 30분 많아요"  # 9시 정각에 쉰 뒤 59분 vs 어제 30분
+    assert cards["휴식 달성률"].detail == "2회 / 권장 4회"  # 90분 사용 → 20분마다 4회, 실제 2회
 
 
 def test_스크린_타임이_적으면_적다고_알려_준다():
     entries = [(10, 7, 9, 600)] + [(*lw(d), 9, 3600) for d in range(7)]
     cards = usage_cards(Period.WEEK, entries, [done(at(10, 7, 9)), done(lw_at(0, 9))])
     assert cards["하루 평균"].trend == "down" and cards["하루 평균"].compare == "지난 주보다 57분 적어요"
-    assert cards["가장 많이 쓴 날"].compare == "지난 주 최고보다 50분 적어요"
 
 
 def test_스크린_타임_평균이_분으로_같으면_비슷하다고_한다():
     entries = [(10, d, 9, 1800) for d in (5, 6, 7)] + [(*lw(d), 9, 1810) for d in range(7)]
     cards = usage_cards(Period.WEEK, entries, [done(at(10, 7, 9)), done(lw_at(0, 9))])
     assert cards["하루 평균"].compare == "지난 주와 비슷해요" and cards["하루 평균"].trend == "same"
-    assert cards["가장 많이 쓴 날"].compare == "지난 주 최고와 비슷해요"
+    assert cards["쉬지 않고 쓴 가장 긴 시간"].compare == "지난 주와 비슷해요"  # 둘 다 한 시간대 30분을 쉬지 않고 썼다
 
 
-def test_앞_기간_스크린_타임이_없으면_사용_카드만_비교하지_않는다():
+def test_앞_기간_스크린_타임이_없으면_비교를_붙이지_않는다():
     entries = [(10, 7, 9, 3600)]  # 지난 주 사용 기록 없음
     cards = usage_cards(Period.WEEK, entries, WEEK_CARD_EVENTS)
-    assert cards["하루 평균"].compare == "" and cards["가장 많이 쓴 날"].compare == ""
-    assert cards["운동 완료"].compare != ""  # 운동 기록은 지난 주에 있으니 비교한다
+    assert cards["하루 평균"].compare == "" and cards["쉬지 않고 쓴 가장 긴 시간"].compare == ""
+    assert cards["휴식 달성률"].compare == ""  # 달성률은 앞 기간과 비교하지 않는다
 
 
-def test_앞_기간_운동_기록이_없으면_운동_완료_카드만_비교하지_않는다():
+def test_휴식_기록이_없어도_사용_카드는_앞_기간과_비교한다():
     cards = usage_cards(Period.WEEK, WEEK_USAGE, [done(at(10, 7, 9))])
-    assert cards["운동 완료"].compare == ""
-    assert cards["하루 평균"].compare != "" and cards["가장 많이 쓴 날"].compare != ""
+    assert cards["하루 평균"].compare != "" and cards["쉬지 않고 쓴 가장 긴 시간"].compare != ""
 
 
 def test_스크린_타임_카드_값은_비교를_더해도_그대로다():
     from eyeexercise.core.stats import usage_highlights
 
     usage = usage_of_hours(WEEK_USAGE)
-    plain_cards = usage_highlights(Period.WEEK, us_summary(Period.WEEK, usage), ex_summary(Period.WEEK, list(WEEK_CARD_EVENTS)).completed)
+    plain_cards = usage_highlights(Period.WEEK, us_summary(Period.WEEK, usage), rs(Period.WEEK, usage, list(WEEK_CARD_EVENTS)))
     with_compare = usage_cards(Period.WEEK, WEEK_USAGE, WEEK_CARD_EVENTS)
     assert [(c.label, c.value, c.detail) for c in plain_cards] == [(c.label, c.value, c.detail) for c in with_compare.values()]
 
@@ -1071,3 +1098,83 @@ def test_비교_문구에는_0분과_0회가_단독으로_나오지_않는다():
         cards = usage_cards(Period.DAY, entries, [done(at(10, 7, 9)), done(at(10, 6, 9))], label="어제")
         for card in cards.values():
             assert not re.search(r"(?<!\d)0(분|회|개)", card.compare), (seconds, card.label, card.compare)
+
+
+# ---- 쉬지 않고 쓴 가장 긴 시간 / 휴식 달성률 ----
+
+
+def test_쉬지_않고_쓴_가장_긴_시간은_사용_구간을_휴식과_빈_시간에서_끊는다():
+    from eyeexercise.core.stats import longest_unbroken_seconds
+
+    hours = [0.0] * 24
+    hours[9] = hours[10] = hours[11] = 3600.0
+    assert longest_unbroken_seconds(hours, []) == 3 * 3600  # 9~12시를 한 번도 안 쉬고 썼다
+    # 10시 30분에 쉬면 둘로 갈린다. 쉰 그 1분은 빠진다: 9:00~10:29(90분) / 10:31~11:59(89분)
+    assert longest_unbroken_seconds(hours, [10 * 60 + 30]) == 90 * 60
+    # 사용이 없는 시간대(점심)는 자리를 비운 것이라 쉰 것으로 본다
+    hours = [0.0] * 24
+    for h in (9, 10, 12, 13, 14):
+        hours[h] = 3600.0
+    assert longest_unbroken_seconds(hours, []) == 3 * 3600  # 12~15시
+
+
+def test_쉬지_않고_쓴_시간은_일부만_쓴_시간대는_쓴_만큼만_센다():
+    from eyeexercise.core.stats import longest_unbroken_seconds
+
+    hours = [0.0] * 24
+    hours[9] = 1800.0
+    assert longest_unbroken_seconds(hours, []) == 1800
+    assert longest_unbroken_seconds([0.0] * 24, [600]) == 0
+    assert longest_unbroken_seconds(hours, [-5, 2000]) == 1800  # 하루 밖의 시각은 무시한다
+
+
+def test_하루_보기의_휴식_달성률():
+    usage = make_usage([(10, 7, 9, 3600), (10, 7, 10, 3600), (10, 7, 11, 3600)])  # 3시간 → 20분마다 권장 9회
+    events = [done(at(10, 7, 9, 30)), done(at(10, 7, 10, 0)), done(at(10, 7, 11, 30))]
+    stats = rs(Period.DAY, usage, events)
+    assert (stats.rests, stats.recommended) == (3, 9)
+    assert stats.rate == pytest.approx(1 / 3)
+    assert stats.longest_seconds == 89 * 60  # 10:01~11:29 (분 단위로 센 값)
+    assert stats.longest_label == ""
+
+
+def test_휴식을_더_많이_해도_달성률은_100퍼센트가_최대다():
+    usage = make_usage([(10, 7, 9, 1500)])  # 25분 사용 → 권장 1회
+    events = [done(at(10, 7, 9, m)) for m in (5, 10, 15)]
+    assert rs(Period.DAY, usage, events).rate == 1.0
+
+
+def test_사용_시간이_휴식_주기보다_짧으면_달성률을_계산하지_않는다():
+    stats = rs(Period.DAY, make_usage([(10, 7, 9, 600)]), [done(at(10, 7, 9, 5))])
+    assert stats.recommended == 0 and stats.rate is None
+
+
+def test_휴식_달성률은_눈_휴식_완료만_센다():
+    usage = make_usage([(10, 7, 9, 3600)])
+    events = [done(at(10, 7, 9, 5)), skipped(at(10, 7, 9, 10)), snoozed(at(10, 7, 9, 15)), done(at(10, 7, 9, 30), "dot_follow", 60)]
+    assert rs(Period.DAY, usage, events).rests == 1  # 건너뜀·미룸·눈 운동은 휴식으로 세지 않는다
+
+
+def test_권장_횟수는_하루마다_내림해서_더한다():
+    # 하루 19분씩 3일이면 하루로 합친 57분(권장 2회)이 아니라 하루마다 0회
+    usage = make_usage([(10, 5, 9, 1140), (10, 6, 9, 1140), (10, 7, 9, 1140)])
+    assert rs(Period.WEEK, usage, []).recommended == 0
+
+
+def test_휴식_주기를_바꾸면_권장_횟수가_따라간다():
+    usage = make_usage([(10, 7, 9, 3600)])
+    assert rs(Period.DAY, usage, [], interval=20).recommended == 3
+    assert rs(Period.DAY, usage, [], interval=30).recommended == 2
+    assert rs(Period.DAY, usage, [], interval=60).recommended == 1
+
+
+def test_주_보기는_가장_길게_쉬지_않은_날의_이름을_알려_준다():
+    usage = make_usage([(10, 5, 9, 3600), (10, 6, 9, 3600), (10, 6, 10, 3600), (10, 7, 9, 3600)])
+    stats = rs(Period.WEEK, usage, [])
+    assert stats.longest_seconds == 2 * 3600 and stats.longest_label == "어제"  # 화요일(오늘이 수요일)
+
+
+def test_아직_오지_않은_날은_세지_않는다():
+    usage = make_usage([(10, 7, 9, 3600)])
+    stats = rs(Period.WEEK, usage, [])
+    assert stats.recommended == 3  # 오늘까지만

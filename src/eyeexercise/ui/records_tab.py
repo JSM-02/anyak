@@ -1,6 +1,6 @@
 """기록 탭. 기간 전환, 큰 숫자 요약, 막대 차트, 하이라이트 카드, 날짜별 표를 넓은 데스크톱 화면에 배치한다.
 
-위쪽 전환으로 '운동'(완료 횟수)과 '스크린 타임'(PC 사용 시간)을 오간다. 둘은 같은 화면 구조를 쓴다.
+위쪽 전환으로 '눈 휴식'(마친 횟수)과 '스크린 타임'(PC 사용 시간)을 오간다. 둘은 같은 화면 구조를 쓴다. 눈 운동은 오늘 요약 카드와 하루 흐름에 횟수로만 나온다.
 계산은 모두 core/stats가 한다. 이 모듈은 그 결과를 그리기만 한다.
 """
 
@@ -10,7 +10,7 @@ from datetime import datetime, tzinfo
 from enum import Enum
 
 from PySide6.QtCore import QPointF, QRectF, Qt, QTimer, Signal
-from PySide6.QtGui import QColor, QFont, QMouseEvent, QPainter, QPen
+from PySide6.QtGui import QFont, QMouseEvent, QPainter, QPen
 from PySide6.QtWidgets import (
     QToolTip,
     QButtonGroup,
@@ -20,12 +20,13 @@ from PySide6.QtWidgets import (
     QLayout,
     QPushButton,
     QScrollArea,
+    QSizePolicy,
     QVBoxLayout,
     QWidget,
 )
 
 from eyeexercise.core.clock import SystemClock
-from eyeexercise.core.history import HistoryEvent
+from eyeexercise.core.history import ACTIVITY_EXERCISE, ACTIVITY_REST, HistoryEvent
 from eyeexercise.core.stats import (
     TREND_SYMBOLS,
     Period,
@@ -35,10 +36,12 @@ from eyeexercise.core.stats import (
     can_go_forward,
     compare_exercise_period,
     compare_today,
+    events_of,
     compare_usage_period,
     format_duration,
     format_usage,
     format_usage_axis,
+    rest_stats,
     highlights_with_compare,
     nice_axis_max,
     nice_usage_axis,
@@ -55,22 +58,6 @@ from eyeexercise.core.stats import (
 from eyeexercise.core.usage import UsageLog
 from eyeexercise.ui import theme
 
-_BLUE = QColor("#1a73e8")
-_GRAY = QColor("#9aa0a6")
-_ORANGE = QColor("#f9ab00")
-_PURPLE = QColor("#8e5bd8")
-# 최근 기록의 색 원: 완료는 운동 종류별, 건너뜀·미룸은 결과별
-_EXERCISE_COLORS = {"blink": _BLUE, "dot_follow": _PURPLE}
-_RESULT_COLORS = {"skipped": _GRAY, "snoozed": _ORANGE}
-
-
-def marker_color(kind: str, exercise: str) -> QColor:
-    """기록 한 줄 앞에 붙이는 색 원의 색. 모르는 운동은 파랑으로 둔다."""
-    if kind == "completed":
-        return _EXERCISE_COLORS.get(exercise, _BLUE)
-    return _RESULT_COLORS.get(kind, _GRAY)
-
-
 _PERIOD_LABELS = ((Period.DAY, "일"), (Period.WEEK, "주"), (Period.MONTH, "월"))
 RECENT_COLLAPSED = 7  # 처음에 보여 주는 하루 타임라인 일수
 RECENT_EXPANDED = 30  # '더 보기'를 눌렀을 때
@@ -78,11 +65,11 @@ LIVE_REFRESH_MS = 30_000  # 스크린 타임을 보는 동안 숫자가 따라�
 
 
 class Mode(Enum):
-    EXERCISE = "exercise"
+    REST = "rest"
     SCREEN_TIME = "screen_time"
 
 
-_MODE_LABELS = ((Mode.EXERCISE, "운동"), (Mode.SCREEN_TIME, "스크린 타임"))
+_MODE_LABELS = ((Mode.REST, "눈 휴식"), (Mode.SCREEN_TIME, "스크린 타임"))
 
 _STYLE = """
 #records, #recordsContent { background: $bg; }
@@ -272,15 +259,37 @@ def arrow_line(trend: str, line: str) -> str:
     return line if "기록이 없어요" in line else f"{TREND_SYMBOLS[trend]} {line}"
 
 
+def _bucket_caption(bucket) -> str:
+    """막대를 눌렀을 때 큰 숫자 아래 문구: 그 막대의 건너뜀·미룸. 아무 기록이 없으면 안내."""
+    parts = []
+    if bucket.skipped:
+        parts.append(f"건너뜀 {bucket.skipped}회")
+    if bucket.snoozed:
+        parts.append(f"미룸 {bucket.snoozed}회")
+    if parts:
+        return " · ".join(parts)
+    return "" if bucket.completed else "휴식 기록 없음"
+
+
+def activity_summary(day) -> str:
+    """하루 줄 오른쪽 둘째 줄: "휴식 18회 · 운동 2회 · 건너뜀 3회". 건너뜀·미룸은 있을 때만."""
+    parts = [f"휴식 {day.rests}회", f"운동 {day.exercises}회"]
+    if day.skipped:
+        parts.append(f"건너뜀 {day.skipped}회")
+    if day.snoozed:
+        parts.append(f"미룸 {day.snoozed}회")
+    return " · ".join(parts)
+
+
 class TimelineChart(QWidget):
     """하루 흐름. 날짜마다 한 줄, 시간대(1시간)마다 한 칸인 격자다.
 
-    칸의 초록이 진할수록 그 시간대에 스크린 타임이 길고, 칸 안의 숫자는 그 시간대에 완료한 운동 횟수다.
-    건너뜀(회색)·미룸(주황)은 칸 귀퉁이의 작은 점으로 알린다. 칸에 마우스를 올리면 자세한 내용이 뜬다.
+    칸의 초록이 진할수록 그 시간대에 스크린 타임이 길고, 칸 안의 숫자는 그 시간대에 마친 눈 운동 횟수다.
+    눈 휴식은 20분마다라 칸에 쓰면 너무 많아지므로 줄 오른쪽 요약에만 센다. 칸에 마우스를 올리면 자세한 내용이 뜬다.
     """
 
     _LABEL_W = 92  # 왼쪽 날짜 칸
-    _INFO_W = 176  # 오른쪽 요약 칸
+    _INFO_W = 220  # 오른쪽 요약 칸
     _HEAD_H = 24  # 위쪽 시간 글자
     _ROW_H = 36
     _CELL_H = 26
@@ -343,7 +352,7 @@ class TimelineChart(QWidget):
         return row, min(23, hour)
 
     def tip_at(self, pos: QPointF) -> str:
-        """pos에 보여 줄 설명. 칸에 스크린 타임이나 운동 기록이 있으면 여러 줄로, 없으면 빈 문자열."""
+        """pos에 보여 줄 설명. 칸에 스크린 타임이나 기록이 있으면 여러 줄(스크린 타임, 그 시간대의 기록들)로, 없으면 빈 문자열."""
         cell = self.cell_at(pos)
         if cell is None:
             return ""
@@ -351,11 +360,8 @@ class TimelineChart(QWidget):
         day = self._days[row]
         lines = []
         if day.hours[hour] > 0:
-            lines.append(f"{hour}시대 스크린 타임 {format_usage(day.hours[hour])}")
-        marks = day.hour_marks(hour)
-        if marks and not lines:
-            lines.append(f"{hour}시대")
-        lines.extend(m.tip for m in marks)
+            lines.append(f"스크린 타임 {format_usage(day.hours[hour])}")
+        lines.extend(m.tip for m in day.hour_marks(hour))
         return "\n".join(lines)
 
     def mouseMoveEvent(self, event: QMouseEvent) -> None:
@@ -407,17 +413,12 @@ class TimelineChart(QWidget):
                     fill, strength = theme.color("chip"), 0.0
                 painter.setBrush(fill)
                 painter.drawRoundedRect(rect, 4, 4)
-                done = sum(1 for m in marks if m.kind == "completed")
-                if done:  # 완료한 운동 횟수. 진한 칸에서는 흰 글자가 읽힌다
+                done = day.exercises_in_hour(hour)
+                if done:  # 마친 눈 운동 횟수. 진한 칸에서는 흰 글자가 읽힌다
                     painter.setFont(bold)
                     painter.setPen(theme.color("on_accent") if strength > 0.55 else theme.color("text"))
                     painter.drawText(rect, Qt.AlignmentFlag.AlignCenter, str(done))
                     painter.setFont(small)
-                dots = [marker_color(kind, "") for kind in ("skipped", "snoozed") if any(m.kind == kind for m in marks)]
-                painter.setPen(QPen(theme.color("surface"), 1))
-                for i, color in enumerate(dots):  # 건너뜀·미룸: 칸 오른쪽 위 귀퉁이의 작은 점
-                    painter.setBrush(color)
-                    painter.drawEllipse(QPointF(rect.right() - 4 - i * 7, rect.top() + 4), 2.8, 2.8)
             # 오른쪽 요약
             info = QRectF(self.width() - self._INFO_W, top, self._INFO_W, self._ROW_H)
             if day.is_empty:
@@ -434,7 +435,7 @@ class TimelineChart(QWidget):
             painter.drawText(
                 QRectF(info.left(), top + 18, info.width(), 16),
                 Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
-                f"운동 {day.completed}회",
+                activity_summary(day),
             )
         painter.end()
 
@@ -446,14 +447,16 @@ class RecordsTab(QWidget):
         now: Callable[[], datetime] = SystemClock().now,
         tz: tzinfo | None = None,
         usage_provider: Callable[[], UsageLog] | None = None,
+        interval_minutes: Callable[[], int] = lambda: 20,
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
         self._events = events_provider
+        self._interval_minutes = interval_minutes  # 휴식 주기(분). 휴식 달성률의 권장 횟수를 구한다
         self._usage = usage_provider or UsageLog
         self._now = now
         self._tz = tz
-        self._mode = Mode.EXERCISE
+        self._mode = Mode.REST
         self._period = Period.WEEK
         self._anchor = self._today()
         self._selected = -1
@@ -464,7 +467,7 @@ class RecordsTab(QWidget):
         theme.bind(self, _STYLE)
         theme.on_changed(self.refresh)  # 숫자 글자색처럼 문장에 박힌 색도 새 테마로 다시 만든다
 
-        # 보는 것 (운동 / 스크린 타임)
+        # 보는 것 (눈 휴식 / 눈 운동 / 스크린 타임)
         mode_frame, mode_buttons, self._mode_group = _segmented(text for _, text in _MODE_LABELS)
         self._mode_buttons: dict[Mode, QPushButton] = {}
         for (mode, _), button in zip(_MODE_LABELS, mode_buttons, strict=True):
@@ -551,24 +554,26 @@ class RecordsTab(QWidget):
             self._highlight_compares.append(compare)
 
         # 오늘 요약: 어제 하루와 비교해서 보여 준다 (보는 기간과 상관없이 항상 보인다)
-        today_row = QHBoxLayout()
+        today_widget = QWidget()  # 창이 커져도 가장 큰 카드의 높이까지만 차지하고, 세 카드는 같은 높이로 맞춘다
+        today_widget.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Maximum)
+        today_row = QHBoxLayout(today_widget)
+        today_row.setContentsMargins(0, 0, 0, 0)
         today_row.setSpacing(12)
         self._today_cards: dict[str, list[QLabel]] = {}
-        for key, title_text in (("exercise", "오늘 운동 완료"), ("screen", "오늘 스크린 타임")):
+        for key, title_text in (("rest", "오늘 눈 휴식"), ("exercise", "오늘 눈 운동"), ("screen", "오늘 스크린 타임")):
             card = _card()
             layout = QVBoxLayout(card)
             layout.setContentsMargins(18, 12, 18, 12)
             layout.setSpacing(2)
-            title_label, value_label, line, sub = QLabel(title_text), QLabel(), QLabel(), QLabel()
+            title_label, value_label, line = QLabel(title_text), QLabel(), QLabel()
             title_label.setObjectName("todayTitle")
             value_label.setObjectName("todayValue")
             line.setObjectName("todayLine")
-            sub.setObjectName("todayLineSub")
-            for widget in (title_label, value_label, line, sub):
+            for widget in (title_label, value_label, line):
                 layout.addWidget(widget)
-            layout.addStretch()  # 두 칸의 줄 수가 달라도 글이 위에서부터 같은 높이에 놓이게 한다
+            layout.addStretch()
             today_row.addWidget(card, stretch=1)
-            self._today_cards[key] = [value_label, line, sub]
+            self._today_cards[key] = [value_label, line]
 
         # 하루 타임라인 (운동·스크린 타임 두 모드 공통)
         self._section = QLabel()
@@ -610,7 +615,7 @@ class RecordsTab(QWidget):
         top.addStretch()
         top.addWidget(mode_frame)
         body.addLayout(top)
-        body.addLayout(today_row)
+        body.addWidget(today_widget)
 
         controls = QHBoxLayout()
         controls.addWidget(segment)
@@ -651,13 +656,11 @@ class RecordsTab(QWidget):
 
     @staticmethod
     def _legend_html() -> list[str]:
-        """하루 흐름 범례: 칸 색(스크린 타임), 숫자(완료 횟수), 귀퉁이 점(건너뜀·미룸)."""
+        """하루 흐름 범례: 칸 색(스크린 타임)과 칸 안의 숫자(눈 운동 횟수). 휴식·건너뜀·미룸은 줄 오른쪽에 적혀 있다."""
         accent = theme.palette().accent
         return [
             f'<span style="color:{accent};">▬</span> 스크린 타임 (진할수록 오래)',
-            f'<b>3</b> 완료한 운동 횟수',
-            f'<span style="color:{_GRAY.name()};">●</span> 건너뜀',
-            f'<span style="color:{_ORANGE.name()};">●</span> 미룸',
+            "<b>2</b> 마친 눈 운동 횟수",
         ]
 
     # ---- 상태 ----
@@ -724,35 +727,36 @@ class RecordsTab(QWidget):
         now = self._now()
         today = self._today()
         events = list(self._events())
+        rest_events = events_of(events, ACTIVITY_REST)
+        exercise_events = events_of(events, ACTIVITY_EXERCISE)
         usage = self._usage()
-        buckets = build_buckets(self._period, self._anchor, events, now, self._tz)
+        # 눈 휴식 화면의 기록은 휴식만. 눈 운동은 오늘 요약 카드와 하루 흐름에서 횟수로만 보여 준다
+        scoped = rest_events
+        noun = "휴식"
+        buckets = build_buckets(self._period, self._anchor, scoped, now, self._tz)
         summary = summarize_range(self._period, self._anchor, buckets, now, self._tz)
 
-        self._draw_today(compare_today(events, usage, now, self._tz))
+        self._draw_today(compare_today(rest_events, usage, now, self._tz), compare_today(exercise_events, usage, now, self._tz))
         self._nav_title.setText(range_title(self._period, self._anchor, today))
         self._next.setEnabled(can_go_forward(self._period, self._anchor, today))
 
         # 하이라이트 카드를 앞 기간과 비교하려고 앞 기간도 같은 방식으로 요약한다
         previous_anchor = shift_anchor(self._period, self._anchor, -1)
-        previous = summarize_range(self._period, previous_anchor, build_buckets(self._period, previous_anchor, events, now, self._tz), now, self._tz)
+        previous = summarize_range(self._period, previous_anchor, build_buckets(self._period, previous_anchor, scoped, now, self._tz), now, self._tz)
         label = previous_label(self._period, self._anchor, today)
-        if self._mode is Mode.EXERCISE:
-            self._draw_exercise(buckets, summary, events, now, previous, label)
+        if self._mode is Mode.SCREEN_TIME:
+            self._draw_screen_time(buckets, usage, now, today, previous_anchor, label, events, rest_events)
         else:
-            self._draw_screen_time(buckets, summary, usage, now, today, previous, previous_anchor, label)
+            self._draw_activity(noun, buckets, summary, scoped, now, previous, label, events)
 
-    def _draw_today(self, c) -> None:
-        value, line, sub = self._today_cards["exercise"]
-        value.setText(f"{c.exercise_count}회")
-        first, *rest = c.exercise_lines
-        line.setText(arrow_line(c.exercise_trend, first))
-        sub.setText(rest[0] if rest else "")
-        sub.setVisible(bool(rest))
-        value, line, sub = self._today_cards["screen"]
-        value.setText(format_usage(c.screen_seconds))
-        line.setText(arrow_line(c.screen_trend, c.screen_line))
-        sub.setText("")
-        sub.setVisible(False)
+    def _draw_today(self, rest, exercise) -> None:
+        for key, c in (("rest", rest), ("exercise", exercise)):
+            value, line = self._today_cards[key]
+            value.setText(f"{c.exercise_count}회")
+            line.setText(arrow_line(c.exercise_trend, c.exercise_lines[0]))
+        value, line = self._today_cards["screen"]
+        value.setText(format_usage(rest.screen_seconds))
+        line.setText(arrow_line(rest.screen_trend, rest.screen_line))
 
     def _set_compare(self, compare: PeriodCompare | None) -> None:
         """큰 숫자 아래의 앞 기간 비교. None이면(막대를 선택해 그 막대의 값을 보는 중) 숨긴다."""
@@ -770,25 +774,26 @@ class RecordsTab(QWidget):
             self._selected = -1
         return self._selected
 
-    def _draw_exercise(self, buckets, summary, events, now, previous, label) -> None:
+    def _draw_activity(self, noun, buckets, summary, scoped, now, previous, label, all_events) -> None:
+        """눈 휴식 화면. noun은 문구에 들어가는 이름("휴식")."""
         selected = self._valid_selection(buckets)
         if selected >= 0:
             b = buckets[selected]
             self._kicker.setText(b.title)
             self._set_number(b.completed)
-            self._caption.setText(f"운동 시간 {format_duration(b.exercise_seconds)}" if b.completed else "완료한 운동 없음")
+            self._caption.setText(_bucket_caption(b))
         else:
-            self._kicker.setText("완료한 운동")
+            self._kicker.setText(f"눈 {noun}")
             self._set_number(summary.completed)
             self._caption.setText(range_caption(self._period, self._anchor))
         self._chart.set_data(buckets, selected)
-        self._set_compare(None if selected >= 0 else compare_exercise_period(self._period, self._anchor, events, now, self._tz))
+        self._set_compare(None if selected >= 0 else compare_exercise_period(self._period, self._anchor, scoped, now, self._tz))
         self._set_highlights(highlights_with_compare(self._period, summary, previous, label))
 
-        self._draw_timeline(events, self._usage(), now)
+        self._draw_timeline(all_events, self._usage(), now)
 
     def _draw_timeline(self, events, usage: UsageLog, now) -> None:
-        """운동·스크린 타임 두 모드가 같은 하루 타임라인을 보여 준다."""
+        """눈 휴식·스크린 타임 두 화면이 같은 하루 타임라인을 보여 준다."""
         self._section.setText("하루 흐름")
         for item, html in zip(self._legend_items, self._legend_html(), strict=True):
             item.setText(html)  # 테마가 바뀌면 색도 따라간다
@@ -797,7 +802,7 @@ class RecordsTab(QWidget):
         self._legend.setVisible(True)
         self._timeline.set_days(timeline_days(events, usage, now, RECENT_EXPANDED if self._expanded else RECENT_COLLAPSED, self._tz))
 
-    def _draw_screen_time(self, exercise_buckets, exercise_summary, usage: UsageLog, now, today, previous_exercise, previous_anchor, label) -> None:
+    def _draw_screen_time(self, rest_buckets, usage: UsageLog, now, today, previous_anchor, label, all_events, rest_events) -> None:
         usage_buckets = build_usage_buckets(self._period, self._anchor, usage, now, self._tz)
         usage_summary = summarize_usage(self._period, self._anchor, usage_buckets, now, self._tz)
         selected = self._valid_selection(usage_buckets)
@@ -805,7 +810,7 @@ class RecordsTab(QWidget):
             b = usage_buckets[selected]
             self._kicker.setText(b.title)
             self._set_number_parts(usage_parts(b.seconds))
-            self._caption.setText(f"운동 완료 {exercise_buckets[selected].completed}회")
+            self._caption.setText(f"눈 휴식 {rest_buckets[selected].completed}회")
         else:
             self._kicker.setText("스크린 타임")
             self._set_number_parts(usage_parts(usage_summary.total_seconds))
@@ -818,11 +823,12 @@ class RecordsTab(QWidget):
         previous_usage = summarize_usage(
             self._period, previous_anchor, build_usage_buckets(self._period, previous_anchor, usage, now, self._tz), now, self._tz
         )
-        self._set_highlights(
-            usage_highlights_with_compare(self._period, usage_summary, exercise_summary, previous_usage, previous_exercise, label)
-        )
+        interval = self._interval_minutes()
+        stats = rest_stats(self._period, self._anchor, usage, rest_events, now, self._tz, interval)
+        previous_stats = rest_stats(self._period, previous_anchor, usage, rest_events, now, self._tz, interval)
+        self._set_highlights(usage_highlights_with_compare(self._period, usage_summary, stats, previous_usage, previous_stats, label))
 
-        self._draw_timeline(list(self._events()), usage, now)
+        self._draw_timeline(all_events, usage, now)
 
     def _set_highlights(self, cards) -> None:
         for label, value, detail, compare, card in zip(

@@ -9,7 +9,7 @@ from PySide6.QtGui import QColor, QImage, QPainter
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication, QFrame, QStyleFactory, QVBoxLayout, QWidget
 
-from eyeexercise.core.settings import Settings
+from eyeexercise.core.settings import Settings, with_changes
 from eyeexercise.core.settings_manager import SettingsManager
 from eyeexercise.ui import theme
 from eyeexercise.ui.controls import CONTROLS_STYLE, LabeledSlider, Segmented, Switch
@@ -222,7 +222,7 @@ def test_어떤_기본_스타일에서도_설정_화면의_컨트롤이_보인�
     previous = qapp.style().objectName()
     qapp.setStyle(style)
     try:
-        page = SettingsPage(SettingsManager(Settings()))
+        page = SettingsPage(SettingsManager(with_changes(Settings(), {"show_main_window_on_start": False})))  # 꺼진 스위치를 보려고 끈다
         page.resize(900, 1100)
         page.show()
         qapp.processEvents()

@@ -10,7 +10,15 @@ from datetime import date, datetime, timedelta, tzinfo
 from enum import Enum
 
 from eyeexercise.core.exercises import EXERCISE_BLINK, EXERCISE_DOT_FOLLOW
-from eyeexercise.core.history import EVENT_COMPLETED, EVENT_SKIPPED, EVENT_SNOOZED, HistoryEvent
+from eyeexercise.core.history import (
+    ACTIVITY_EXERCISE,
+    ACTIVITY_REST,
+    EVENT_COMPLETED,
+    EVENT_SKIPPED,
+    EVENT_SNOOZED,
+    HistoryEvent,
+    activity_of,
+)
 from eyeexercise.core.usage import UsageLog
 
 WEEKDAYS = "월화수목금토일"  # date.weekday() 순서 (월요일 = 0). 주는 월요일에 시작한다.
@@ -46,6 +54,7 @@ class RangeSummary:
     exercise_seconds: int
     average_per_day: float  # 지나간 날(오늘까지)만 센 하루 평균 완료 횟수
     days: int = 1  # 평균에 쓴 지나간 날 수 (아직 오지 않은 날은 뺀다)
+    active_buckets: int = 0  # 완료가 한 번이라도 있었던 막대 수 (하루 보기에서는 쉰 시간대 수)
 
 
 @dataclass(frozen=True)
@@ -194,16 +203,17 @@ def summarize_range(period: Period, anchor: date, buckets: Iterable[Bucket], now
         exercise_seconds=sum(b.exercise_seconds for b in buckets),
         average_per_day=completed / elapsed_days if elapsed_days else 0.0,
         days=elapsed_days,
+        active_buckets=sum(1 for b in buckets if b.completed > 0 and not b.is_future),
     )
 
 
 def highlights(period: Period, summary: RangeSummary) -> list[Highlight]:
-    """하이라이트 카드 세 개. 하루 보기에는 평균이 의미 없어서 미룸을 보여 준다."""
-    time_card = Highlight("운동 시간", format_duration(summary.exercise_seconds))
+    """눈 휴식 하이라이트 카드 세 개. 하루 보기에는 평균이 의미 없어서 쉰 시간대 수를 보여 준다."""
     skipped = Highlight("건너뜀", f"{summary.skipped}회")
+    snoozed = Highlight("미룸", f"{summary.snoozed}회")
     if period is Period.DAY:
-        return [time_card, skipped, Highlight("미룸", f"{summary.snoozed}회")]
-    return [Highlight("하루 평균", f"{summary.average_per_day:.1f}회"), time_card, skipped]
+        return [skipped, snoozed, Highlight("쉰 시간대", f"{summary.active_buckets}개")]
+    return [Highlight("하루 평균", f"{summary.average_per_day:.1f}회"), skipped, snoozed]
 
 
 # ---- 표시 형식 ----
@@ -230,12 +240,13 @@ MIN_ACTIVE_SECONDS = 60  # 한 시간대에 이만큼은 써야 '사용한 시�
 
 @dataclass(frozen=True)
 class TimelineMark:
-    """하루 줄 위에 찍는 점 하나 (운동 완료, 건너뜀, 미룸)."""
+    """하루 줄 위의 기록 하나 (휴식·운동 완료, 건너뜀, 미룸)."""
 
     minute: float  # 자정부터의 분 (0~1440)
     kind: str  # completed / skipped / snoozed
+    activity: str  # rest(눈 휴식) / exercise(눈 운동)
     exercise: str  # 완료한 운동의 종류 키. 그 외는 빈 문자열
-    tip: str  # 마우스를 올렸을 때 보여 줄 설명 ("14:32 깜빡임 완료 · 1분 6초")
+    tip: str  # 마우스를 올렸을 때 보여 줄 설명 ("14:32 점 따라가기 · 1분")
 
 
 @dataclass(frozen=True)
@@ -244,38 +255,50 @@ class TimelineDay:
     hours: list[float]  # 시간대별(0~23시) 스크린 타임(초)
     marks: list[TimelineMark]  # 시간순
     total_seconds: float
-    completed: int
-    span: str  # "9시~18시대"처럼 스크린 타임이 있던 처음~마지막 시간대. 없으면 빈 문자열
+    rests: int  # 마친 눈 휴식 횟수
+    exercises: int  # 마친 눈 운동 횟수
+    skipped: int
+    snoozed: int
+    span: str  # "09:00~18:00"처럼 스크린 타임이 있던 처음~마지막 시간대(1시간 단위). 없으면 빈 문자열
 
     @property
     def is_empty(self) -> bool:
         return not self.marks and self.total_seconds <= 0
 
     def hour_marks(self, hour: int) -> list[TimelineMark]:
-        """hour시(0~23)에 일어난 점들. 시간순."""
+        """hour시(0~23)에 일어난 기록들. 시간순."""
         return [m for m in self.marks if int(m.minute // 60) == hour]
+
+    def exercises_in_hour(self, hour: int) -> int:
+        """hour시에 마친 눈 운동 횟수. 격자 칸의 숫자다 (휴식은 20분마다라 칸에 쓰면 너무 많아진다)."""
+        return sum(1 for m in self.hour_marks(hour) if m.kind == EVENT_COMPLETED and m.activity == ACTIVITY_EXERCISE)
 
 
 def usage_span(hours: Iterable[float]) -> str:
-    """스크린 타임이 있던 처음과 마지막 시간대. 시간대 단위(1시간)로만 알 수 있어서 '대'를 붙인다."""
+    """스크린 타임이 있던 처음과 마지막 시간대를 "09:00~18:00"으로. 시간대(1시간) 단위로만 알 수 있어서 마지막 시간대는 그 시간이 끝나는 때까지 센다."""
     active = [h for h, seconds in enumerate(hours) if seconds >= MIN_ACTIVE_SECONDS]
     if not active:
         return ""
     first, last = active[0], active[-1]
-    return f"{first}시대" if first == last else f"{first}시~{last}시대"
+    return f"{first:02d}:00~{last + 1:02d}:00"
 
 
 def _mark(e: HistoryEvent, local: datetime) -> TimelineMark | None:
+    activity = activity_of(e)
+    if activity is None:  # 휴식인지 운동인지 모르는 옛 건너뜀·미룸은 그리지 않는다
+        return None
     minute = local.hour * 60 + local.minute + local.second / 60
     clock = f"{local:%H:%M}"
     if e.type == EVENT_COMPLETED:
-        name = EXERCISE_NAMES.get(e.exercise or "", e.exercise or "운동")
         length = f" · {format_duration(e.duration_seconds)}" if e.duration_seconds else ""
-        return TimelineMark(minute, EVENT_COMPLETED, e.exercise or "", f"{clock} {name} 완료{length}")
+        if activity == ACTIVITY_REST:
+            return TimelineMark(minute, EVENT_COMPLETED, activity, e.exercise or "", f"{clock} 눈 휴식{length}")
+        name = EXERCISE_NAMES.get(e.exercise or "", e.exercise or "운동")
+        return TimelineMark(minute, EVENT_COMPLETED, activity, e.exercise or "", f"{clock} {name}{length}")
     if e.type == EVENT_SKIPPED:
-        return TimelineMark(minute, EVENT_SKIPPED, "", f"{clock} 건너뜀")
+        return TimelineMark(minute, EVENT_SKIPPED, activity, "", f"{clock} 건너뜀")
     if e.type == EVENT_SNOOZED:
-        return TimelineMark(minute, EVENT_SNOOZED, "", f"{clock} 미룸")
+        return TimelineMark(minute, EVENT_SNOOZED, activity, "", f"{clock} 미룸")
     return None
 
 
@@ -298,17 +321,29 @@ def timeline_days(
         day = today - timedelta(days=i)
         hours = usage.hourly(day)
         day_marks = marks.get(day, [])
+
+        def count(kind: str, activity: str | None = None) -> int:
+            return sum(1 for m in day_marks if m.kind == kind and (activity is None or m.activity == activity))
+
         result.append(
             TimelineDay(
                 range_title(Period.DAY, day, today),
                 hours,
                 day_marks,
                 sum(hours),
-                sum(1 for m in day_marks if m.kind == EVENT_COMPLETED),
+                count(EVENT_COMPLETED, ACTIVITY_REST),
+                count(EVENT_COMPLETED, ACTIVITY_EXERCISE),
+                count(EVENT_SKIPPED),
+                count(EVENT_SNOOZED),
                 usage_span(hours),
             )
         )
     return result
+
+
+def events_of(events: Iterable[HistoryEvent], activity: str) -> list[HistoryEvent]:
+    """휴식(rest) 또는 운동(exercise) 기록만. 구분할 수 없는 옛 건너뜀·미룸은 들어가지 않는다."""
+    return [e for e in events if activity_of(e) == activity]
 
 
 # ---- 차트 눈금 ----
@@ -375,14 +410,93 @@ def summarize_usage(period: Period, anchor: date, buckets: Iterable[UsageBucket]
     )
 
 
-def usage_highlights(period: Period, summary: UsageSummary, completed: int) -> list[Highlight]:
-    """스크린 타임 하이라이트 카드 세 개. 운동 완료 횟수를 함께 보여 줘서 사용량과 비교할 수 있게 한다."""
+@dataclass(frozen=True)
+class RestStats:
+    """스크린 타임과 눈 휴식을 함께 본 값. 이 앱만의 지표라서 다른 스크린 타임 서비스에는 없다."""
+
+    rests: int  # 마친 눈 휴식 횟수
+    recommended: int  # 사용 시간에 맞는 권장 횟수 (하루마다 사용 시간 ÷ 휴식 주기를 내림해서 더한다)
+    longest_seconds: float  # 쉬지 않고 쓴 가장 긴 시간(초)
+    longest_label: str  # 그 시간이 있던 날 이름. 하루 보기에서는 빈 문자열
+
+    @property
+    def rate(self) -> float | None:
+        """휴식 달성률(0~1). 권장 횟수가 0이면(사용 시간이 휴식 주기보다 짧으면) None. 권장보다 많이 쉬어도 1이 최대다."""
+        if self.recommended <= 0:
+            return None
+        return min(1.0, self.rests / self.recommended)
+
+
+def longest_unbroken_seconds(hours: Iterable[float], rest_minutes: Iterable[float]) -> float:
+    """하루 중 쉬지 않고 쓴 가장 긴 시간(초).
+
+    스크린 타임은 시간대(1시간) 단위로만 저장돼 있어서 한 시간대의 사용량이 그 시간에 고르게 퍼졌다고 본다.
+    눈 휴식을 마친 시각(자정부터의 분)과, 사용이 1분도 안 되는 시간대(자리를 비운 시간)에서 끊어
+    끊긴 구간마다 사용 시간을 더하고 그중 가장 긴 것을 돌려준다.
+    """
+    hours = list(hours)
+    breaks = {int(m) for m in rest_minutes if 0 <= m < 1440}
+    for hour, seconds in enumerate(hours):
+        if seconds < MIN_ACTIVE_SECONDS:
+            breaks.update(range(hour * 60, hour * 60 + 60))
+    best = current = 0.0
+    for minute in range(1440):
+        if minute in breaks:
+            best, current = max(best, current), 0.0
+        else:
+            current += hours[minute // 60] / 60
+    return max(best, current)
+
+
+def rest_stats(
+    period: Period,
+    anchor: date,
+    usage: UsageLog,
+    events: Iterable[HistoryEvent],
+    now: datetime,
+    tz: tzinfo | None = None,
+    interval_minutes: int = 20,
+) -> RestStats:
+    """기간의 휴식 달성률과 쉬지 않고 쓴 가장 긴 시간. events는 눈 휴식 기록(완료만 센다)."""
+    today = now.astimezone(tz).date()
+    start, end = range_bounds(period, anchor)
+    rest_minutes: dict[date, list[float]] = {}
+    for e in events:
+        if e.type != EVENT_COMPLETED or activity_of(e) != ACTIVITY_REST:
+            continue
+        local = e.ts.astimezone(tz)
+        if start <= local.date() <= end:
+            rest_minutes.setdefault(local.date(), []).append(local.hour * 60 + local.minute)
+    rests = recommended = 0
+    longest, longest_day = 0.0, None
+    interval_seconds = max(1, interval_minutes) * 60
+    for i in range((min(end, today) - start).days + 1):
+        day = start + timedelta(days=i)
+        hours = usage.hourly(day)
+        day_rests = rest_minutes.get(day, [])
+        rests += len(day_rests)
+        recommended += int(sum(hours) // interval_seconds)
+        seconds = longest_unbroken_seconds(hours, day_rests)
+        if seconds > longest:
+            longest, longest_day = seconds, day
+    label = "" if period is Period.DAY or longest_day is None else range_title(Period.DAY, longest_day, today)
+    return RestStats(rests, recommended, longest, label)
+
+
+def usage_highlights(period: Period, summary: UsageSummary, rest: RestStats) -> list[Highlight]:
+    """스크린 타임 하이라이트 카드 세 개: 사용량(하루 보기는 가장 많이 쓴 시간, 주·월은 하루 평균),
+    쉬지 않고 쓴 가장 긴 시간, 휴식 달성률(권장 횟수 대비 실제로 쉰 횟수)."""
     peak_value = format_usage(summary.peak_seconds) if summary.peak_label else "–"
-    peak_label = summary.peak_label
-    exercise = Highlight("운동 완료", f"{completed}회")
     if period is Period.DAY:
-        return [Highlight("가장 많이 쓴 시간", peak_value, peak_label), Highlight("사용한 시간대", f"{summary.active_buckets}개"), exercise]
-    return [Highlight("하루 평균", format_usage(summary.average_per_day)), Highlight("가장 많이 쓴 날", peak_value, peak_label), exercise]
+        first = Highlight("가장 많이 쓴 시간", peak_value, summary.peak_label)
+    else:
+        first = Highlight("하루 평균", format_usage(summary.average_per_day))
+    longest = Highlight("쉬지 않고 쓴 가장 긴 시간", format_usage(rest.longest_seconds) if rest.longest_seconds > 0 else "–", rest.longest_label)
+    if rest.rate is None:
+        rate = Highlight("휴식 달성률", "–", "사용 시간이 짧아요")
+    else:
+        rate = Highlight("휴식 달성률", f"{round(rest.rate * 100)}%", f"{rest.rests}회 / 권장 {rest.recommended}회")
+    return [first, longest, rate]
 
 
 def format_usage(seconds: float) -> str:
@@ -441,7 +555,7 @@ class TodayCompare:
 
     exercise_count: int
     exercise_trend: str  # up / down / same
-    exercise_lines: list[str]  # ["어제보다 2회 많아요", "운동 시간은 2분 12초 많아요"]
+    exercise_lines: list[str]  # ["어제보다 2회 많아요"]
     screen_seconds: float
     screen_trend: str
     screen_line: str
@@ -456,12 +570,11 @@ def _more_less(delta: float, amount: str) -> str:
 
 
 def compare_today(events: Iterable[HistoryEvent], usage: UsageLog, now: datetime, tz: tzinfo | None = None) -> TodayCompare:
-    """오늘의 운동 완료 횟수·운동 시간·스크린 타임을 어제 하루 전체와 비교한다."""
+    """오늘의 횟수와 스크린 타임을 어제 하루 전체와 비교한다."""
     today = now.astimezone(tz).date()
     yesterday = today - timedelta(days=1)
 
     count_today = count_yesterday = 0
-    seconds_today = seconds_yesterday = 0
     yesterday_events = 0
     for e in events:
         day = e.ts.astimezone(tz).date()
@@ -471,10 +584,8 @@ def compare_today(events: Iterable[HistoryEvent], usage: UsageLog, now: datetime
             continue
         if day == today:
             count_today += 1
-            seconds_today += e.duration_seconds or 0
         else:
             count_yesterday += 1
-            seconds_yesterday += e.duration_seconds or 0
 
     # 어제 기록이 하나도 없으면 앱이 꺼져 있었던 것이라 비교가 의미 없다
     if yesterday_events == 0:
@@ -484,9 +595,7 @@ def compare_today(events: Iterable[HistoryEvent], usage: UsageLog, now: datetime
         delta = count_today - count_yesterday
         exercise_trend = _trend(delta)
         count_line = "어제와 같아요" if delta == 0 else f"어제보다 {_more_less(delta, f'{abs(delta)}회')}"
-        time_delta = seconds_today - seconds_yesterday
-        time_line = "운동 시간도 같아요" if time_delta == 0 else f"운동 시간은 {_more_less(time_delta, format_duration(abs(time_delta)))}"
-        exercise_lines = [count_line, time_line]
+        exercise_lines = [count_line]
 
     screen_today, screen_yesterday = usage.total(today), usage.total(yesterday)
     if screen_yesterday == 0:
@@ -535,7 +644,7 @@ def _range_summary(period: Period, anchor: date, events: list[HistoryEvent], now
 
 
 def compare_exercise_period(period: Period, anchor: date, events: Iterable[HistoryEvent], now: datetime, tz: tzinfo | None = None) -> PeriodCompare:
-    """운동 완료 횟수와 운동 시간을 앞 기간과 비교한다. 앞 기간에 기록이 하나도 없으면 비교하지 않는다."""
+    """마친 횟수를 앞 기간과 비교한다. 앞 기간에 기록이 하나도 없으면 비교하지 않는다."""
     events = list(events)
     label = previous_label(period, anchor, now.astimezone(tz).date())
     cur = _range_summary(period, anchor, events, now, tz)
@@ -545,21 +654,16 @@ def compare_exercise_period(period: Period, anchor: date, events: Iterable[Histo
 
     if period is Period.DAY:
         delta = cur.completed - prev.completed
-        time_delta = cur.exercise_seconds - prev.exercise_seconds
         count_line = f"{_with_particle(label)} 같아요" if delta == 0 else f"{label}보다 {_more_less(delta, f'{abs(delta)}회')}"
-        time_line = "운동 시간도 같아요" if time_delta == 0 else f"운동 시간은 {_more_less(time_delta, format_duration(abs(time_delta)))}"
-        return PeriodCompare(_trend(delta), [count_line, time_line])
+        return PeriodCompare(_trend(delta), [count_line])
 
     # 주·월: 진행 중인 기간을 앞 기간 전체와 합계로 비교하면 항상 적게 나오므로, 지나간 날 기준 하루 평균끼리 비교한다
     avg_delta = cur.average_per_day - prev.average_per_day  # 반올림은 차이를 구한 뒤에 한다 (먼저 하면 0.14가 0.2로 보인다)
-    cur_time, prev_time = cur.exercise_seconds / max(1, cur.days), prev.exercise_seconds / max(1, prev.days)
-    time_delta = round(cur_time - prev_time)
     if round(abs(avg_delta), 1) == 0:  # 화면에 0.0회로 보이면 같다고 한다
         count_line = f"하루 평균이 {_with_particle(label)} 같아요"
     else:
         count_line = f"{label}보다 하루 평균 {_more_less(avg_delta, f'{abs(avg_delta):.1f}회')}"
-    time_line = "운동 시간도 같아요" if time_delta == 0 else f"운동 시간은 하루 평균 {_more_less(time_delta, format_duration(abs(time_delta)))}"
-    return PeriodCompare(_trend(avg_delta) if round(abs(avg_delta), 1) else "same", [count_line, time_line])
+    return PeriodCompare(_trend(avg_delta) if round(abs(avg_delta), 1) else "same", [count_line])
 
 
 def compare_usage_period(period: Period, anchor: date, usage: UsageLog, now: datetime, tz: tzinfo | None = None) -> PeriodCompare:
@@ -626,23 +730,21 @@ def _per_day(value: float, days: int) -> float:
 
 
 def highlights_with_compare(period: Period, summary: RangeSummary, previous: RangeSummary | None, label: str) -> list[Highlight]:
-    """운동 하이라이트 카드에 앞 기간과의 비교를 더한다. 앞 기간에 기록이 하나도 없으면 비교하지 않는다."""
+    """눈 휴식 하이라이트 카드에 앞 기간과의 비교를 더한다. 앞 기간에 기록이 하나도 없으면 비교하지 않는다."""
     cards = highlights(period, summary)
     if previous is None or previous.completed + previous.skipped + previous.snoozed == 0:
         return cards
     if period is Period.DAY:
         fields = {
-            "운동 시간": _seconds_card(label, summary.exercise_seconds, previous.exercise_seconds, per_day=False),
             "건너뜀": _count_card(label, summary.skipped, previous.skipped, per_day=False),
             "미룸": _count_card(label, summary.snoozed, previous.snoozed, per_day=False),
+            "쉰 시간대": _count_unit_card(label, summary.active_buckets, previous.active_buckets, "개"),
         }
     else:  # 주·월은 지나간 날 기준 하루 평균끼리 비교한다
         fields = {
             "하루 평균": _count_card(label, summary.average_per_day, previous.average_per_day, per_day=False, average=True),
-            "운동 시간": _seconds_card(
-                label, _per_day(summary.exercise_seconds, summary.days), _per_day(previous.exercise_seconds, previous.days), per_day=True
-            ),
             "건너뜀": _count_card(label, _per_day(summary.skipped, summary.days), _per_day(previous.skipped, previous.days), per_day=True),
+            "미룸": _count_card(label, _per_day(summary.snoozed, summary.days), _per_day(previous.snoozed, previous.days), per_day=True),
         }
     return [replace(card, **fields.get(card.label, {})) for card in cards]
 
@@ -650,29 +752,21 @@ def highlights_with_compare(period: Period, summary: RangeSummary, previous: Ran
 def usage_highlights_with_compare(
     period: Period,
     summary: UsageSummary,
-    exercise: RangeSummary,
+    rest: RestStats,
     previous: UsageSummary | None,
-    previous_exercise: RangeSummary | None,
+    previous_rest: RestStats | None,
     label: str,
 ) -> list[Highlight]:
-    """스크린 타임 하이라이트 카드에 앞 기간과의 비교를 더한다. 사용 시간 카드는 앞 기간 스크린 타임이, 운동 완료 카드는 앞 기간 운동 기록이 있을 때만 비교한다."""
-    cards = usage_highlights(period, summary, exercise.completed)
+    """스크린 타임 하이라이트 카드에 앞 기간과의 비교를 더한다. 앞 기간 스크린 타임이 없으면 비교하지 않는다."""
+    cards = usage_highlights(period, summary, rest)
     fields: dict[str, dict] = {}
     if previous is not None and previous.total_seconds > 0:
-        peak = _usage_card(label, summary.peak_seconds, previous.peak_seconds, subject=f"{label} 최고")
         if period is Period.DAY:
-            fields["가장 많이 쓴 시간"] = peak
-            fields["사용한 시간대"] = _count_unit_card(label, summary.active_buckets, previous.active_buckets, "개")
+            fields["가장 많이 쓴 시간"] = _usage_card(label, summary.peak_seconds, previous.peak_seconds, subject=f"{label} 최고")
         else:
             fields["하루 평균"] = _usage_card(label, summary.average_per_day, previous.average_per_day)
-            fields["가장 많이 쓴 날"] = peak
-    if previous_exercise is not None and previous_exercise.completed + previous_exercise.skipped + previous_exercise.snoozed > 0:
-        if period is Period.DAY:
-            fields["운동 완료"] = _count_card(label, exercise.completed, previous_exercise.completed, per_day=False)
-        else:
-            fields["운동 완료"] = _count_card(
-                label, exercise.average_per_day, previous_exercise.average_per_day, per_day=True
-            )
+        if previous_rest is not None and previous_rest.longest_seconds > 0 and rest.longest_seconds > 0:
+            fields["쉬지 않고 쓴 가장 긴 시간"] = _usage_card(label, rest.longest_seconds, previous_rest.longest_seconds)
     return [replace(card, **fields.get(card.label, {})) for card in cards]
 
 

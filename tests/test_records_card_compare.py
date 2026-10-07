@@ -27,7 +27,7 @@ def done(ts, seconds=66):
 
 
 def skipped(ts):
-    return HistoryEvent(ts, "skipped")
+    return HistoryEvent(ts, "skipped", activity="rest")
 
 
 def make_tab(qapp, events=(), entries=()):
@@ -70,12 +70,12 @@ USAGE = [(10, 5, 9, 3600), (10, 6, 9, 3600), (10, 6, 10, 3600), (10, 7, 9, 3600)
 
 def test_주_운동_카드마다_앞_기간과의_비교가_보인다(qapp):
     tab = make_tab(qapp, EVENTS)
-    assert card_texts(tab, "cardLabel") == ["하루 평균", "운동 시간", "건너뜀"]
-    assert card_texts(tab, "cardValue") == ["2.0회", "6분 36초", "3회"]
+    assert card_texts(tab, "cardLabel") == ["하루 평균", "건너뜀", "미룸"]  # 휴식 시간은 보여 주지 않는다
+    assert card_texts(tab, "cardValue") == ["2.0회", "3회", "0회"]
     assert card_texts(tab, "cardCompare") == [
         "▲ 지난 주보다 1.0회 많아요",
-        "▲ 지난 주보다 하루 평균 1분 6초 많아요",
         "▲ 지난 주보다 하루 평균 0.7회 많아요",
+        "– 지난 주와 같아요",
     ]
     assert all(not lbl.isHidden() for lbl in labels(tab, "cardCompare"))
 
@@ -84,8 +84,9 @@ def test_일_운동_카드는_어제와_합계로_비교한다(qapp):
     events = [done(at(10, 7, 9)), done(at(10, 7, 10)), skipped(at(10, 7, 11)), done(at(10, 6, 9)), skipped(at(10, 6, 10)), skipped(at(10, 6, 11))]
     tab = make_tab(qapp, events)
     tab.set_period(Period.DAY)
-    assert card_texts(tab, "cardLabel") == ["운동 시간", "건너뜀", "미룸"]
-    assert card_texts(tab, "cardCompare") == ["▲ 어제보다 1분 6초 많아요", "▼ 어제보다 1회 적어요", "– 어제와 같아요"]
+    assert card_texts(tab, "cardLabel") == ["건너뜀", "미룸", "쉰 시간대"]
+    assert card_texts(tab, "cardValue") == ["1회", "0회", "2개"]  # 오늘은 9시와 10시에 쉬었다
+    assert card_texts(tab, "cardCompare") == ["▼ 어제보다 1회 적어요", "– 어제와 같아요", "▲ 어제보다 1개 많아요"]
 
 
 def test_월_운동_카드도_비교한다(qapp):
@@ -109,7 +110,7 @@ def test_앞_기간에_기록이_없으면_카드의_비교_줄은_숨긴다(qap
 
 def test_기록이_하나도_없어도_카드가_깨지지_않는다(qapp):
     tab = make_tab(qapp)
-    assert card_texts(tab, "cardValue") == ["0.0회", "0초", "0회"]
+    assert card_texts(tab, "cardValue") == ["0.0회", "0회", "0회"]
     assert all(lbl.isHidden() for lbl in labels(tab, "cardCompare"))
 
 
@@ -131,14 +132,10 @@ def test_막대를_선택해도_카드는_기간_전체의_비교를_그대로_�
 def test_스크린_타임_주_카드_비교(qapp):
     tab = make_tab(qapp, EVENTS, USAGE)
     tab.set_mode(Mode.SCREEN_TIME)
-    assert card_texts(tab, "cardLabel") == ["하루 평균", "가장 많이 쓴 날", "운동 완료"]
-    assert card_texts(tab, "cardValue") == ["1시간 20분", "2시간", "6회"]
-    assert card_texts(tab, "cardCompare") == [
-        "▲ 지난 주보다 50분 많아요",
-        "▲ 지난 주 최고보다 1시간 30분 많아요",
-        "▲ 지난 주보다 하루 평균 1.0회 많아요",
-    ]
-    assert card_texts(tab, "cardDetail")[1] == "화요일"  # 최고 카드의 보조 설명은 그대로 보인다
+    assert card_texts(tab, "cardLabel") == ["하루 평균", "쉬지 않고 쓴 가장 긴 시간", "휴식 달성률"]
+    assert card_texts(tab, "cardValue") == ["1시간 20분", "1시간 59분", "50%"]
+    assert card_texts(tab, "cardCompare") == ["▲ 지난 주보다 50분 많아요", "▲ 지난 주보다 1시간 30분 많아요", ""]  # 달성률은 비교하지 않는다
+    assert card_texts(tab, "cardDetail")[1:] == ["어제", "6회 / 권장 12회"]  # 화요일(어제)에 가장 오래 쉬지 않았고, 권장 12회 중 6회 쉬었다
 
 
 def test_스크린_타임_일_카드_비교(qapp):
@@ -147,16 +144,16 @@ def test_스크린_타임_일_카드_비교(qapp):
     tab = make_tab(qapp, events, entries)
     tab.set_mode(Mode.SCREEN_TIME)
     tab.set_period(Period.DAY)
-    assert card_texts(tab, "cardLabel") == ["가장 많이 쓴 시간", "사용한 시간대", "운동 완료"]
-    assert card_texts(tab, "cardCompare") == ["▲ 어제 최고보다 30분 많아요", "▲ 어제보다 1개 많아요", "▲ 어제보다 1회 많아요"]
+    assert card_texts(tab, "cardLabel") == ["가장 많이 쓴 시간", "쉬지 않고 쓴 가장 긴 시간", "휴식 달성률"]
+    assert card_texts(tab, "cardValue") == ["1시간", "59분", "50%"]
+    assert card_texts(tab, "cardCompare") == ["▲ 어제 최고보다 30분 많아요", "▲ 어제보다 30분 많아요", ""]
 
 
-def test_스크린_타임_앞_기간_기록이_없으면_해당_카드만_비교를_숨긴다(qapp):
-    tab = make_tab(qapp, EVENTS, [(10, 7, 9, 3600)])  # 지난 주 스크린 타임 기록 없음, 운동 기록은 있음
+def test_스크린_타임_앞_기간_기록이_없으면_비교를_숨긴다(qapp):
+    tab = make_tab(qapp, EVENTS, [(10, 7, 9, 3600)])  # 지난 주 스크린 타임 기록 없음
     tab.set_mode(Mode.SCREEN_TIME)
-    compares = card_texts(tab, "cardCompare")
-    assert compares[0] == "" and compares[1] == "" and compares[2] != ""
-    assert [lbl.isHidden() for lbl in labels(tab, "cardCompare")] == [True, True, False]
+    assert card_texts(tab, "cardCompare") == ["", "", ""]
+    assert all(lbl.isHidden() for lbl in labels(tab, "cardCompare"))
 
 
 def test_모드를_바꾸면_카드_비교도_바뀐다(qapp):
@@ -164,7 +161,7 @@ def test_모드를_바꾸면_카드_비교도_바뀐다(qapp):
     exercise = card_texts(tab, "cardCompare")
     tab.set_mode(Mode.SCREEN_TIME)
     assert card_texts(tab, "cardCompare") != exercise
-    tab.set_mode(Mode.EXERCISE)
+    tab.set_mode(Mode.REST)
     assert card_texts(tab, "cardCompare") == exercise
 
 
@@ -179,7 +176,7 @@ def test_새_기록이_생기면_카드_비교도_바뀐다(qapp):
     usage = UsageLog()
     tab = RecordsTab(lambda: events, now=lambda: NOW, tz=KST, usage_provider=lambda: usage)
     tab.show()
-    assert card_texts(tab, "cardCompare")[2] == "▲ 지난 주보다 하루 평균 0.7회 많아요"
+    assert card_texts(tab, "cardCompare")[1] == "▲ 지난 주보다 하루 평균 0.7회 많아요"
     events.extend([skipped(at(10, 7, 14)), skipped(at(10, 7, 15)), skipped(at(10, 6, 14))])  # 건너뜀이 6회가 되어 하루 평균 2.0
     tab.refresh()
-    assert card_texts(tab, "cardCompare")[2] == "▲ 지난 주보다 하루 평균 1.7회 많아요"
+    assert card_texts(tab, "cardCompare")[1] == "▲ 지난 주보다 하루 평균 1.7회 많아요"

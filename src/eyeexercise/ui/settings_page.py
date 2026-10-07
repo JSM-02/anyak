@@ -10,7 +10,7 @@
 from collections.abc import Callable
 from typing import Any
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QTimer
 from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QLayout, QPushButton, QScrollArea, QVBoxLayout, QWidget
 
 from eyeexercise.core.exercises import (
@@ -42,8 +42,11 @@ from eyeexercise.ui.controls import CONTROLS_STYLE, LabeledSlider, Segmented, Sw
 APPEARANCE_LABELS = {"system": "시스템 설정", "light": "라이트", "dark": "다크"}
 SPEED_LABELS = {"slow": "느리게", "normal": "보통", "fast": "빠르게"}
 SAVE_FAILED_MESSAGE = "설정을 파일에 저장하지 못했어요. 이번 실행에서만 적용돼요."
-BOTH_OFF_MESSAGE = "두 운동을 모두 끄면 알림이 와도 운동이 시작되지 않아요."
+EXERCISE_OFF_MESSAGE = "점 따라가기를 끄면 눈 운동을 권하지 않아요."
 CUSTOM_LENGTH_MESSAGE = "고급 설정에서 운동마다 따로 정한 길이를 쓰고 있어요."
+RESET_TEXT = "설정 초기화"
+RESET_CONFIRM_TEXT = "정말 초기화할까요? 한 번 더 누르세요"
+RESET_CONFIRM_MS = 5000  # 확인을 기다리는 시간. 지나면 다시 처음 상태로
 ADVANCED_CLOSED = "▸  고급 설정"
 ADVANCED_OPEN = "▾  고급 설정"
 DOT_STEP_SECONDS = 10  # 점 따라가기 시간 슬라이더의 한 칸
@@ -62,6 +65,9 @@ _STYLE = """
 #sliderValue { font-size: $fs_body; font-weight: bold; }
 #advancedToggle { background: transparent; border: none; text-align: left; font-size: $fs_heading; font-weight: bold; color: $accent; padding: 8px 0; }
 #advancedToggle:hover { color: $accent_hover; }
+#resetButton { background: transparent; border: 2px solid $danger; color: $danger; border-radius: 10px; padding: 8px 18px; font-weight: bold; }
+#resetButton:hover { background: $chip; }
+#resetHint { font-size: $fs_caption; color: $text_secondary; }
 """ + CONTROLS_STYLE
 
 
@@ -101,7 +107,7 @@ class SettingsPage(QWidget):
         self._status.setObjectName("saveStatus")
         self._status.setWordWrap(True)
         self._status.hide()
-        self._warning = QLabel(BOTH_OFF_MESSAGE)
+        self._warning = QLabel(EXERCISE_OFF_MESSAGE)
         self._warning.setObjectName("warning")
         self._warning.setWordWrap(True)
         self._warning.hide()
@@ -119,14 +125,16 @@ class SettingsPage(QWidget):
         # ---- 기본 설정: 꼭 필요한 것만 ----
         self._add_section(
             body,
-            "알림",
-            [self._slider("interval_minutes", "알림 주기", "이 시간마다 눈 운동을 알려요.", INTERVAL_MINUTES_RANGE, " 분", 5)],
+            "눈 휴식",
+            [
+                self._slider("interval_minutes", "휴식 주기", "이 시간마다 눈을 쉬게 해 줘요. 먼 곳을 20초 바라봐요.", INTERVAL_MINUTES_RANGE, " 분", 5),
+                self._switch("exercises.blink.enabled", "깜빡임", "휴식 때 눈을 천천히 감았다 뜨는 깜빡임도 함께 해요. 끄면 먼 곳 바라보기만 해요."),
+            ],
         )
         self._add_section(
             body,
             "눈 운동",
             [
-                self._switch("exercises.blink.enabled", "깜빡임 운동", "눈을 천천히 감았다 뜨는 운동이에요."),
                 self._switch("exercises.dot_follow.enabled", "점 따라가기", "화면의 점을 눈으로 따라가는 운동이에요."),
                 self._length_row(),
                 self._slider(
@@ -162,11 +170,11 @@ class SettingsPage(QWidget):
         advanced_layout.setSpacing(10)
         self._add_section(
             advanced_layout,
-            "운동 세부",
+            "휴식·운동 세부",
             [
                 self._slider(
                     "exercises.blink.duration_seconds",
-                    "깜빡임 운동 횟수",
+                    "휴식의 깜빡임 횟수",
                     "",
                     (1, blink_cycles_for_seconds(BLINK_SECONDS_RANGE[1])),
                     "회",
@@ -219,6 +227,23 @@ class SettingsPage(QWidget):
         )
         self._advanced.hide()  # 부모에 붙기 전에는 setVisible(True)를 부르지 않는다. 숨길 때만 hide()
         body.addWidget(self._advanced)
+
+        # ---- 설정 초기화: 확인 창 대신 같은 버튼을 한 번 더 눌러야 한다 ----
+        self._reset_pending = False
+        self._reset_timer = QTimer(self)
+        self._reset_timer.setSingleShot(True)
+        self._reset_timer.setInterval(RESET_CONFIRM_MS)
+        self._reset_timer.timeout.connect(self._cancel_reset)
+        self.reset_button = QPushButton(RESET_TEXT)
+        self.reset_button.setObjectName("resetButton")
+        self.reset_button.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.reset_button.clicked.connect(self._on_reset_clicked)
+        reset_hint = QLabel("모든 설정을 처음 값으로 되돌려요. 기록(운동·스크린 타임·시력)은 그대로 남아요.")
+        reset_hint.setObjectName("resetHint")
+        reset_hint.setWordWrap(True)
+        body.addSpacing(8)
+        body.addWidget(reset_hint)
+        body.addWidget(self.reset_button, alignment=Qt.AlignmentFlag.AlignLeft)
         body.addStretch()
 
         scroll = QScrollArea()
@@ -303,11 +328,27 @@ class SettingsPage(QWidget):
         return self._row("화면 모드", "시스템 설정을 고르면 Windows의 앱 모드를 따라가요.", segmented)
 
     def _length_row(self) -> QWidget:
-        """운동 길이: 짧게 / 보통 / 길게. 두 운동의 길이가 함께 바뀐다."""
+        """길이: 짧게 / 보통 / 길게. 휴식의 깜빡임 횟수와 운동 시간이 함께 바뀐다."""
         preset = Segmented([(p.label, p.key) for p in LENGTH_PRESETS])
         preset.changed.connect(lambda key: self._changed(preset_changes(key)))
         self._preset = preset
-        return self._row("운동 길이", "", preset, hint_key="preset_hint")
+        return self._row("길이", "", preset, hint_key="preset_hint")
+
+    def _on_reset_clicked(self) -> None:
+        if not self._reset_pending:
+            self._reset_pending = True
+            self.reset_button.setText(RESET_CONFIRM_TEXT)
+            self._reset_timer.start()
+            return
+        self._cancel_reset()
+        result = self._manager.reset()
+        self._load(result.settings)
+        self._show_save_result(result.saved)
+
+    def _cancel_reset(self) -> None:
+        self._reset_timer.stop()
+        self._reset_pending = False
+        self.reset_button.setText(RESET_TEXT)
 
     def _toggle_advanced(self) -> None:
         opened = self._advanced.isHidden()
@@ -345,8 +386,7 @@ class SettingsPage(QWidget):
             self._controls["exercises.dot_follow.duration_seconds"].setEnabled(dot_on)
             self._controls["exercises.dot_follow.speed"].setEnabled(dot_on)
             self._controls["exercises.daily_goal"].setEnabled(dot_on)
-            self._preset.setEnabled(blink_on or dot_on)
-            self._warning.setVisible(not blink_on and not dot_on)
+            self._warning.setVisible(not dot_on)
             self._preset.setCurrentData(current_preset(settings.exercises))  # 고급에서 따로 정했으면 아무것도 고르지 않은 상태
             self._update_hints(settings)
         finally:

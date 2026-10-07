@@ -83,18 +83,18 @@ def timeline_days_of(tab):
 # ---- 전환 ----
 
 
-def test_전환_버튼이_있고_처음에는_운동이다(qapp):
+def test_전환_버튼이_있고_처음에는_눈_휴식이다(qapp):
     tab, _, _ = make_tab(qapp)
-    assert [b.text() for b in tab._mode_buttons.values()] == ["운동", "스크린 타임"]
-    assert tab.mode is Mode.EXERCISE and tab._mode_buttons[Mode.EXERCISE].isChecked()
+    assert [b.text() for b in tab._mode_buttons.values()] == ["눈 휴식", "스크린 타임"]  # 눈 운동은 전환이 아니라 오늘 요약과 하루 흐름에 횟수로만 나온다
+    assert tab.mode is Mode.REST and tab._mode_buttons[Mode.REST].isChecked()
 
 
 def test_버튼을_누르면_모드가_바뀐다(qapp):
     tab, _, _ = make_tab(qapp)
     tab._mode_buttons[Mode.SCREEN_TIME].click()
     assert tab.mode is Mode.SCREEN_TIME and tab._kicker.text() == "스크린 타임"
-    tab._mode_buttons[Mode.EXERCISE].click()
-    assert tab.mode is Mode.EXERCISE and tab._kicker.text() == "완료한 운동"
+    tab._mode_buttons[Mode.REST].click()
+    assert tab.mode is Mode.REST and tab._kicker.text() == "눈 휴식"
 
 
 def test_스크린_타임으로_바꾸면_사용_시간을_큰_숫자로_보여_준다(qapp):
@@ -110,14 +110,14 @@ def test_기록이_없으면_0분이고_가운데_안내를_위한_눈금이_있
     tab.set_mode(Mode.SCREEN_TIME)
     assert big_text(tab) == "0 분"
     assert tab._chart.axis_max == 20 * 60
-    assert [v.text() for v in tab._highlight_values] == ["0분", "–", "0회"]
+    assert [v.text() for v in tab._highlight_values] == ["0분", "–", "–"]  # 사용이 없으면 달성률도 계산하지 않는다
 
 
 def test_운동으로_돌아오면_운동_화면이_그대로다(qapp):
     tab, _, _ = make_tab(qapp, [done(at(10, 5)), done(at(10, 6))], entries=[(10, 5, 9, 3600)])
     tab.set_mode(Mode.SCREEN_TIME)
-    tab.set_mode(Mode.EXERCISE)
-    assert tab._kicker.text() == "완료한 운동" and exercise_count(tab) == 2
+    tab.set_mode(Mode.REST)
+    assert tab._kicker.text() == "눈 휴식" and exercise_count(tab) == 2
     assert tab._section.text() == "하루 흐름"
     assert tab._chart.axis_max == 4
     marked = [(d.title, [m.minute for m in d.marks]) for d in timeline_days_of(tab) if d.marks]
@@ -158,9 +158,9 @@ def test_하루_보기는_24시간_막대와_시간대_하이라이트(qapp):
     assert len(tab._chart._buckets) == 24
     assert big_text(tab) == "1 시간 15 분"
     assert tab._chart.axis_max == 3600
-    assert [lbl.text() for lbl in tab._highlight_labels] == ["가장 많이 쓴 시간", "사용한 시간대", "운동 완료"]
-    assert [v.text() for v in tab._highlight_values][:2] == ["45분", "2개"]
-    assert [d.text() for d in tab._highlight_details][:2] == ["14시", ""]
+    assert [lbl.text() for lbl in tab._highlight_labels] == ["가장 많이 쓴 시간", "쉬지 않고 쓴 가장 긴 시간", "휴식 달성률"]
+    assert [v.text() for v in tab._highlight_values] == ["45분", "45분", "0%"]
+    assert [d.text() for d in tab._highlight_details] == ["14시", "", "0회 / 권장 3회"]  # 75분 사용 → 20분마다 3회
 
 
 def test_이전_기간으로_가면_그_기간_사용_시간이다(qapp):
@@ -178,7 +178,7 @@ def test_막대를_누르면_그_막대의_사용_시간과_운동_횟수를_보
     click_bar(tab, 0)  # 월요일
     assert tab._kicker.text() == "10월 5일 (월)"
     assert big_text(tab) == "1 시간 30 분"
-    assert tab._caption.text() == "운동 완료 2회"
+    assert tab._caption.text() == "눈 휴식 2회"
     click_bar(tab, 0)
     assert tab._kicker.text() == "스크린 타임" and big_text(tab) == "1 시간 30 분"  # 전체 합계로 돌아온다
 
@@ -187,19 +187,19 @@ def test_사용_기록이_없는_날을_눌러도_된다(qapp):
     tab, _, _ = make_tab(qapp, entries=[(10, 5, 9, 600)])
     tab.set_mode(Mode.SCREEN_TIME)
     click_bar(tab, 1)  # 화요일
-    assert tab._chart._selected == 1 and big_text(tab) == "0 분" and tab._caption.text() == "운동 완료 0회"
+    assert tab._chart._selected == 1 and big_text(tab) == "0 분" and tab._caption.text() == "눈 휴식 0회"
 
 
 # ---- 하이라이트와 목록 ----
 
 
-def test_하이라이트는_평균_가장_많은_날_운동_완료(qapp):
+def test_하이라이트는_평균_쉬지_않고_쓴_시간_휴식_달성률(qapp):
     events = [done(at(10, 5)), done(at(10, 6)), done(at(10, 7))]
     tab, _, _ = make_tab(qapp, events, entries=[(10, 5, 9, 3600), (10, 7, 9, 3600), (10, 7, 10, 3600)])
     tab.set_mode(Mode.SCREEN_TIME)
-    assert [lbl.text() for lbl in tab._highlight_labels] == ["하루 평균", "가장 많이 쓴 날", "운동 완료"]
-    assert [v.text() for v in tab._highlight_values] == ["1시간", "2시간", "3회"]
-    assert [d.text() for d in tab._highlight_details] == ["", "수요일", ""]
+    assert [lbl.text() for lbl in tab._highlight_labels] == ["하루 평균", "쉬지 않고 쓴 가장 긴 시간", "휴식 달성률"]
+    assert [v.text() for v in tab._highlight_values] == ["1시간", "2시간", "33%"]  # 수요일 9~11시를 쉬지 않고 썼다, 권장 9회 중 3회
+    assert [d.text() for d in tab._highlight_details] == ["", "오늘", "3회 / 권장 9회"]
 
 
 def test_스크린_타임에서도_하루_흐름에_시간대별_사용이_보인다(qapp):
@@ -209,7 +209,7 @@ def test_스크린_타임에서도_하루_흐름에_시간대별_사용이_보�
     days = timeline_days_of(tab)
     assert [d.title for d in days][:3] == ["오늘", "어제", "10월 5일 (월)"] and len(days) == 7
     assert days[0].hours[9] == 3600 and days[0].hours[10] == 1800
-    assert (days[0].span, days[1].span, days[2].span, days[6].span) == ("9시~10시대", "9시대", "", "9시대")
+    assert (days[0].span, days[1].span, days[2].span, days[6].span) == ("09:00~11:00", "09:00~10:00", "", "09:00~10:00")
     assert days[0].total_seconds == 5400
     assert not tab._more.isHidden() and not tab._legend.isHidden()
 
@@ -217,7 +217,7 @@ def test_스크린_타임에서도_하루_흐름에_시간대별_사용이_보�
 def test_하루_흐름의_마우스_설명에_사용_시간이_나온다(qapp):
     tab, _, _ = make_tab(qapp, entries=[(10, 7, 9, 2520)])
     chart = tab._timeline
-    assert chart.tip_at(chart.cell_rect(0, 9).center()) == "9시대 스크린 타임 42분"
+    assert chart.tip_at(chart.cell_rect(0, 9).center()) == "스크린 타임 42분"
     assert chart.tip_at(chart.cell_rect(0, 7).center()) == ""
 
 
@@ -289,3 +289,33 @@ def test_메인_창에_사용_기록이_없어도_스크린_타임이_열린다(
     window = MainWindow(History())
     window.records_tab.set_mode(Mode.SCREEN_TIME)
     assert big_text(window.records_tab) == "0 분"
+
+
+def test_휴식_주기를_바꾸면_휴식_달성률이_따라간다(qapp):
+    from eyeexercise.core.history import HistoryEvent
+    from eyeexercise.ui.records_tab import RecordsTab
+
+    usage = usage_of([(10, 7, 9, 3600)])
+    events = [HistoryEvent(at(10, 7, 9, 30), "completed", "blink", 36)]
+    interval = {"minutes": 20}
+    tab = RecordsTab(lambda: events, now=lambda: NOW, tz=KST, usage_provider=lambda: usage, interval_minutes=lambda: interval["minutes"])
+    tab.set_mode(Mode.SCREEN_TIME)
+    tab.set_period(Period.DAY)
+    assert [d.text() for d in tab._highlight_details][2] == "1회 / 권장 3회"
+    interval["minutes"] = 60  # 60분마다 쉬는 설정이면 권장은 1회
+    tab.refresh()
+    assert [v.text() for v in tab._highlight_values][2] == "100%"
+    assert [d.text() for d in tab._highlight_details][2] == "1회 / 권장 1회"
+
+
+def test_눈_운동과_건너뜀은_휴식_달성률에_세지_않는다(qapp):
+    from eyeexercise.core.history import HistoryEvent
+
+    events = [
+        HistoryEvent(at(10, 7, 9, 10), "completed", "dot_follow", 60),
+        HistoryEvent(at(10, 7, 9, 20), "skipped", activity="rest"),
+    ]
+    tab, _, _ = make_tab(qapp, events, entries=[(10, 7, 9, 3600)])
+    tab.set_mode(Mode.SCREEN_TIME)
+    tab.set_period(Period.DAY)
+    assert [d.text() for d in tab._highlight_details][2] == "0회 / 권장 3회"

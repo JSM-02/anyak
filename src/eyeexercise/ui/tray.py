@@ -24,6 +24,7 @@ class TrayIcon(QObject):
         self._act_open = self._menu.addAction("열기")
         self._menu.setDefaultAction(self._act_open)
         self._menu.addSeparator()
+        self._act_rest = self._menu.addAction("지금 휴식")
         self._act_now = self._menu.addAction("지금 운동")
         self._act_pause = self._menu.addAction("일시정지")
         self._menu.addSeparator()
@@ -32,6 +33,7 @@ class TrayIcon(QObject):
 
         self._act_open.triggered.connect(self.open_requested)
         self._tray.activated.connect(self._on_activated)
+        self._act_rest.triggered.connect(controller.start_rest)
         self._act_now.triggered.connect(controller.start_exercise)
         self._act_pause.triggered.connect(self._toggle_pause)
         self._act_quit.triggered.connect(self.quit_requested)
@@ -51,18 +53,20 @@ class TrayIcon(QObject):
 
     def refresh(self) -> None:
         state = self._controller.state
-        self._act_now.setEnabled(state in (State.RUNNING, State.SNOOZED, State.DUE))
+        startable = state in (State.RUNNING, State.SNOOZED, State.DUE)
+        self._act_rest.setEnabled(startable)
+        self._act_now.setEnabled(startable)
         self._act_pause.setText("재개" if state is State.PAUSED else "일시정지")
         self._act_pause.setEnabled(state in (State.RUNNING, State.SNOOZED, State.PAUSED))
         self._tray.setToolTip(f"{_APP_NAME} — {self._status_text(state)}")
 
     def _status_text(self, state: State) -> str:
         if state is State.DUE:
-            return "눈 운동할 시간이에요"
+            return "눈 쉬는 시간이에요"
         if state is State.EXERCISING:
-            return "운동 중"
+            return "눈 운동 중" if self._controller.activity == "exercise" else "눈 쉬는 중"
         remaining = self._controller.remaining_seconds
-        text = f"다음 알림까지 {format_remaining(remaining)}" if remaining is not None else ""
+        text = f"다음 휴식까지 {format_remaining(remaining)}" if remaining is not None else ""
         if state is State.PAUSED:
             return f"일시정지됨 ({text})"
         if state is State.SNOOZED:

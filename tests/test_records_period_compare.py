@@ -80,14 +80,14 @@ def test_화살표는_추세에_따라_붙고_비교할_수_없으면_붙지_않
 
 def test_주_보기는_큰_숫자_아래에_지난_주와의_하루_평균_비교가_보인다(qapp):
     tab, _ = make_tab(qapp, WEEK_EVENTS)
-    assert compare_texts(tab) == ("▲ 지난 주보다 하루 평균 1.0회 많아요", "운동 시간은 하루 평균 1분 6초 많아요")
-    assert not label(tab, "compareLine").isHidden() and not label(tab, "compareLineSub").isHidden()
+    assert compare_texts(tab) == ("▲ 지난 주보다 하루 평균 1.0회 많아요", "")
+    assert not label(tab, "compareLine").isHidden() and label(tab, "compareLineSub").isHidden()  # 휴식 시간 비교는 없다
 
 
 def test_일_보기는_어제와_합계로_비교한다(qapp):
     tab, _ = make_tab(qapp, [done(at(10, 7, 9)), done(at(10, 7, 10)), done(at(10, 6, 9))])
     tab.set_period(Period.DAY)
-    assert compare_texts(tab) == ("▲ 어제보다 1회 많아요", "운동 시간은 1분 6초 많아요")
+    assert compare_texts(tab) == ("▲ 어제보다 1회 많아요", "")
 
 
 def test_월_보기는_지난_달과_하루_평균으로_비교한다(qapp):
@@ -121,7 +121,7 @@ def test_기록이_하나도_없어도_비교_줄이_깨지지_않는다(qapp):
 def test_같으면_같다고_보인다(qapp):
     events = [done(at(10, 5, 9)), done(at(10, 6, 9)), done(at(10, 7, 9))] + [done(at(*last_week(d), 9)) for d in range(7)]
     tab, _ = make_tab(qapp, events)
-    assert compare_texts(tab) == ("– 하루 평균이 지난 주와 같아요", "운동 시간도 같아요")
+    assert compare_texts(tab) == ("– 하루 평균이 지난 주와 같아요", "")
 
 
 # ---- 막대를 선택하면 숨긴다 ----
@@ -175,7 +175,7 @@ def test_모드를_바꾸면_비교_내용도_바뀐다(qapp):
     exercise = compare_texts(tab)[0]
     tab.set_mode(Mode.SCREEN_TIME)
     assert compare_texts(tab)[0] != exercise and "회" not in compare_texts(tab)[0]
-    tab.set_mode(Mode.EXERCISE)
+    tab.set_mode(Mode.REST)
     assert compare_texts(tab)[0] == exercise
 
 
@@ -188,9 +188,8 @@ def test_일_보기의_비교는_오늘_요약의_문구와_같다(qapp):
     tab, _ = make_tab(qapp, events, entries)
     tab.set_period(Period.DAY)
     assert label(tab, "compareLine").text() == label(tab, "todayLine", 0).text()
-    assert label(tab, "compareLineSub").text() == label(tab, "todayLineSub", 0).text()
     tab.set_mode(Mode.SCREEN_TIME)
-    assert label(tab, "compareLine").text() == label(tab, "todayLine", 1).text()
+    assert label(tab, "compareLine").text() == label(tab, "todayLine", 2).text()  # 오늘 요약의 셋째 칸이 스크린 타임
 
 
 def test_새_기록이_생기면_비교도_바뀐다(qapp):
