@@ -6,44 +6,29 @@ Windows 데스크톱 앱처럼 왼쪽에 메뉴, 오른쪽에 넓은 본문을 �
 from collections.abc import Callable
 from datetime import datetime
 
-from PySide6.QtCore import QRect, Qt, Signal
+from PySide6.QtCore import QRect, Signal
 from PySide6.QtGui import QCloseEvent, QGuiApplication
-from PySide6.QtWidgets import (
-    QHBoxLayout,
-    QLabel,
-    QListWidget,
-    QMainWindow,
-    QStackedWidget,
-    QVBoxLayout,
-    QWidget,
-)
+from PySide6.QtWidgets import QHBoxLayout, QMainWindow, QStackedWidget, QWidget
 
 from eyeexercise.core.clock import SystemClock
+from eyeexercise.core.formatting import timer_pill
 from eyeexercise.core.history import History
 from eyeexercise.core.settings import Settings
 from eyeexercise.core.settings_manager import SettingsManager
 from eyeexercise.core.usage import UsageLog
 from eyeexercise.core.vision import VisionLog
-from eyeexercise.ui import theme
+from eyeexercise.ui.controller import Controller
 from eyeexercise.ui.records_tab import RecordsTab
 from eyeexercise.ui.settings_page import SettingsPage
+from eyeexercise.ui.sidebar import Sidebar
 from eyeexercise.ui.vision_page import VisionPage
 
 WINDOW_SIZE = (1000, 700)
-WINDOW_MIN_SIZE = (860, 560)
+WINDOW_MIN_SIZE = (880, 560)
 _SCREEN_MARGIN = 40  # 작업 표시줄과 창 테두리를 빼고 화면에 남기는 여유
-SIDEBAR_WIDTH = 176
 
-_STYLE = """
-#sidebar { background: $sidebar; border-right: 1px solid $sidebar_border; }
-#appName { font-size: $fs_heading; font-weight: bold; color: $text; padding: 4px 6px 12px 6px; }
-#navList { background: transparent; border: none; outline: none; }
-#navList::item { padding: 10px 12px; border-radius: 6px; margin: 1px 0; color: $text_body; }
-#navList::item:hover { background: $hover; }
-#navList::item:selected { background: $surface; color: $accent; font-weight: bold; }
-"""
-
-_MENU = ("기록", "설정", "시력 기록")
+_MENU = ("기록", "시력 기록", "설정")  # 같은 순서로 본문 화면을 쌓는다
+_MENU_ICONS = ("chart", "eye", "gear")
 
 
 def fit_to_screen(area: QRect) -> tuple[tuple[int, int], tuple[int, int]]:
@@ -83,35 +68,33 @@ class MainWindow(QMainWindow):
         self.settings_page = SettingsPage(manager)
         self.vision_page = VisionPage(vision_log, today=lambda: now().date())
         self._stack = QStackedWidget()
-        for page in (self.records_tab, self.settings_page, self.vision_page):  # _MENU와 같은 순서
+        for page in (self.records_tab, self.vision_page, self.settings_page):  # _MENU와 같은 순서
             self._stack.addWidget(page)
 
-        self._nav = QListWidget()
-        self._nav.setObjectName("navList")
-        self._nav.setFocusPolicy(Qt.FocusPolicy.NoFocus)
-        self._nav.addItems(_MENU)
-        self._nav.currentRowChanged.connect(self._stack.setCurrentIndex)
-        self._nav.setCurrentRow(0)
-
-        app_name = QLabel("EyeExercise")
-        app_name.setObjectName("appName")
-        sidebar = QWidget()
-        sidebar.setObjectName("sidebar")
-        sidebar.setAttribute(Qt.WidgetAttribute.WA_StyledBackground)
-        sidebar.setFixedWidth(SIDEBAR_WIDTH)
-        side_layout = QVBoxLayout(sidebar)
-        side_layout.setContentsMargins(10, 14, 10, 10)
-        side_layout.addWidget(app_name)
-        side_layout.addWidget(self._nav)
+        self.sidebar = Sidebar(_MENU, _MENU_ICONS)
+        self.sidebar.current_changed.connect(self._stack.setCurrentIndex)
+        self._controller: Controller | None = None
 
         central = QWidget()
-        theme.bind(central, _STYLE)
         layout = QHBoxLayout(central)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
-        layout.addWidget(sidebar)
+        layout.addWidget(self.sidebar)
         layout.addWidget(self._stack, stretch=1)
         self.setCentralWidget(central)
+
+    def attach_controller(self, controller: Controller) -> None:
+        """사이드바의 눈 휴식 타이머가 컨트롤러의 남은 시간·상태를 따라가게 한다."""
+        self._controller = controller
+        controller.ticked.connect(self._refresh_timer)
+        controller.state_changed.connect(self._refresh_timer)
+        self._refresh_timer()
+
+    def _refresh_timer(self) -> None:
+        if self._controller is None:
+            return
+        text, tone = timer_pill(self._controller.state, self._controller.remaining_seconds, self._controller.activity)
+        self.sidebar.set_timer(text, tone)
 
     def show_and_raise(self) -> None:
         if self.isMinimized():

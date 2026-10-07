@@ -48,37 +48,52 @@ class Palette:
     knob: str  # 스위치·슬라이더 손잡이
     danger: str
     warning: str
+    # 디자인 토대(9a): 히어로 카드·포인트 모래색·달성률 게이지의 세 색·사이드바
+    hero: str
+    sand: str
+    gauge_good: str
+    gauge_mid: str
+    gauge_low: str
+    sidebar_text: str
+    sidebar_pill: str
 
 
 LIGHT = Palette(
-    bg="#f5f5f7",
+    bg="#EAF1EE",
     surface="#ffffff",
-    sidebar="#f0f0f3",
-    sidebar_border="#e0e0e4",
-    hover="#e6e6ea",
-    chip="#f1f3f4",
-    border="#e4e4e8",
-    border_strong="#c8ccd0",
-    input_border="#b8bcc2",
-    divider="#f0f0f3",
-    grid="#e0e0e5",
-    text="#202124",
-    text_body="#3c4043",
-    text_secondary="#5f6368",
-    text_muted="#80868b",
-    text_faint="#9aa0a6",
+    sidebar="#092328",
+    sidebar_border="#092328",
+    hover="#D5E4DE",
+    chip="#DFEBE6",
+    border="#DDE8E4",
+    border_strong="#B7CBC4",
+    input_border="#8AA39C",
+    divider="#E3ECE8",
+    grid="#DDE8E4",
+    text="#092328",
+    text_body="#2F4A46",
+    text_secondary="#4F6B66",
+    text_muted="#5F7B76",
+    text_faint="#8AA39C",
     on_accent="#ffffff",
-    accent="#188038",
-    accent_hover="#137333",
-    accent_soft="#e6f4ea",
-    accent_disabled="#a8dab5",
-    disabled="#c4c7cc",
-    track="#d5d8dc",
-    switch_off="#9aa0a6",
-    switch_off_disabled="#dadce0",
+    accent="#2A835F",
+    accent_hover="#206B4D",
+    accent_soft="#D6EBDD",
+    accent_disabled="#A9CFBD",
+    disabled="#B7CBC4",
+    track="#DDE8E4",
+    switch_off="#8AA39C",
+    switch_off_disabled="#DDE8E4",
     knob="#ffffff",
     danger="#c5221f",
     warning="#9a5400",
+    hero="#12544F",
+    sand="#F2E3B3",
+    gauge_good="#2A835F",
+    gauge_mid="#D9A03A",
+    gauge_low="#D9622B",
+    sidebar_text="#9FC8A6",
+    sidebar_pill="#12544F",
 )
 
 DARK = Palette(
@@ -110,6 +125,13 @@ DARK = Palette(
     knob="#e8eaed",
     danger="#f28b82",
     warning="#fdc569",
+    hero="#14625A",
+    sand="#E8D79C",
+    gauge_good="#81C995",
+    gauge_mid="#E3B04B",
+    gauge_low="#F0805A",
+    sidebar_text="#9FC8A6",
+    sidebar_pill="#1E4A46",
 )
 
 # 글자 크기(px). 화면마다 제각각이던 값을 이 여덟 가지로 맞춘다.

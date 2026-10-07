@@ -449,7 +449,7 @@ def test_설명_문구는_제목보다_옅은_회색이다(qapp):
     title = min(label_pixels(page, first_label(page, "rowTitle")), key=lambda c: c.lightness())
     hint = min(label_pixels(page, first_label(page, "rowHint")), key=lambda c: c.lightness())
     assert title.lightness() < 40  # 제목은 거의 검정
-    assert hint.name() == "#5f6368"  # 설명은 회색
+    assert hint.name() == "#4f6b66"  # 설명은 회색
 
 
 def test_경고와_저장_실패_안내는_색이_있는_글자로_보인다(qapp):
@@ -681,7 +681,7 @@ def test_슬라이더_값_말풍선은_손잡이를_따라_움직이고_정수_�
     assert xs[0] < xs[1] < xs[2]
     assert slider.slider.singleStep() == 1 and isinstance(slider.value(), int)
     img = slider.bubble.grab().toImage()
-    blue = sum(1 for y in range(img.height()) for x in range(img.width()) if img.pixelColor(x, y).green() > 100 and img.pixelColor(x, y).red() < 60 and img.pixelColor(x, y).blue() < 90)
+    blue = sum(1 for y in range(img.height()) for x in range(img.width()) if img.pixelColor(x, y).green() > 100 and img.pixelColor(x, y).red() < 60 and img.pixelColor(x, y).blue() < 120)
     assert blue > 100  # 초록 말풍선이 실제로 그려진다
 
 

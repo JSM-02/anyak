@@ -304,7 +304,7 @@ class TimelineChart(QWidget):
         self._start_hour = self._DEFAULT_START
         self._empty_text = "아직 기록이 없어요"
         self.setMouseTracking(True)
-        self.setMinimumWidth(420)
+        self.setMinimumWidth(400)
         self._fit_height()
 
     def set_days(self, days: Sequence) -> None:
@@ -569,6 +569,7 @@ class RecordsTab(QWidget):
             title_label.setObjectName("todayTitle")
             value_label.setObjectName("todayValue")
             line.setObjectName("todayLine")
+            line.setWordWrap(True)  # 좁은 창에서 카드가 줄어들 수 있게 한다 (가로 스크롤이 생기지 않게)
             for widget in (title_label, value_label, line):
                 layout.addWidget(widget)
             layout.addStretch()

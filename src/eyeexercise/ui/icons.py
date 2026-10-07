@@ -12,10 +12,10 @@ from PySide6.QtGui import QColor, QIcon, QImage, QLinearGradient, QPainter, QPai
 ICON_SIZES = (16, 20, 24, 32, 40, 48, 64, 128, 256)  # 트레이·작업 표시줄·알림 창에서 쓰는 크기들(배율 포함)
 ICO_SIZES = (16, 24, 32, 48, 64, 128, 256)  # .ico 파일에 담는 크기
 
-_GREEN_TOP = "#34a853"
-_GREEN_BOTTOM = "#188038"
-_IRIS = "#137333"
-_PUPIL = "#0b2b17"
+_GREEN_TOP = "#2F9A6E"
+_GREEN_BOTTOM = "#12544F"
+_IRIS = "#12544F"
+_PUPIL = "#092328"
 
 
 def render_icon(size: int) -> QImage:

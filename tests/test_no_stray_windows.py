@@ -79,8 +79,8 @@ def test_기록_탭을_만들고_넘겨_보는_동안_작은_창이_뜨지_않�
 
 def test_메인_창을_만드는_동안_작은_창이_뜨지_않는다(qapp, spy):
     window = MainWindow(History(), settings_manager=SettingsManager(Settings()))
-    for row in range(window._nav.count()):  # 메뉴를 하나씩 눌러 본다 (창을 띄우지는 않는다)
-        window._nav.setCurrentRow(row)
+    for row in range(window.sidebar.count()):  # 메뉴를 하나씩 눌러 본다 (창을 띄우지는 않는다)
+        window.sidebar.set_current(row)
     qapp.processEvents()
     assert spy.windows == []
 

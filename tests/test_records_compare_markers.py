@@ -162,7 +162,7 @@ def test_범례는_칸_색과_눈_운동_숫자의_뜻을_보여_준다(qapp):
     tab, _ = make_tab(qapp, [rest(at(10, 7, 14))])
     assert [plain(t) for t in texts(tab, "legendItem")] == ["▬ 스크린 타임 (진할수록 오래)", "2 마친 눈 운동 횟수"]
     assert not tab._legend.isHidden()
-    assert re.findall(r"#[0-9a-f]{6}", " ".join(texts(tab, "legendItem"))) == ["#188038"]  # 칸 색은 포인트 색(초록)
+    assert [c.lower() for c in re.findall(r"#[0-9a-fA-F]{6}", " ".join(texts(tab, "legendItem")))] == ["#2a835f"]  # 칸 색은 포인트 색(초록)
 
 
 def test_모든_모드에서_범례가_보인다(qapp):

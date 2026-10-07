@@ -527,3 +527,29 @@ def test_눈꺼풀_움직임은_양끝이_느리고_가운데가_빠르다():
     assert _ease(0.1) < 0.1 and _ease(0.9) > 0.9  # 시작과 끝은 선형보다 느리게 움직인다
     values = [_ease(i / 20) for i in range(21)]
     assert values == sorted(values)  # 항상 한 방향으로 움직인다
+
+
+def test_눈동자는_열린_눈의_한가운데에_있다(qapp):
+    """눈꺼풀 사이 열린 부분의 위아래 한가운데에 눈동자를 둔다 (눈이 아래를 보는 것처럼 보이지 않게)."""
+    from eyeexercise.ui.exercise_window import EyeWidget
+
+    eye = EyeWidget()
+    eye.resize(260, 140)
+    for openness in (1.0, 0.8, 0.5, 0.25):
+        eye.set_openness(openness)
+        rect = eye.lid_path().boundingRect()
+        assert eye.iris_center().y() == pytest.approx(rect.center().y(), abs=2.0), openness
+        assert eye.iris_center().x() == pytest.approx(130.0)
+
+
+def test_활짝_뜬_눈에서_눈동자가_눈_윤곽_안에_완전히_들어온다(qapp):
+    from PySide6.QtCore import QPointF
+
+    from eyeexercise.ui.exercise_window import EyeWidget
+
+    eye = EyeWidget()
+    eye.resize(260, 140)
+    eye.set_openness(1.0)
+    path, c = eye.lid_path(), eye.iris_center()
+    for dx, dy in ((0, -EyeWidget._IRIS_R + 3), (0, EyeWidget._IRIS_R - 3), (-EyeWidget._IRIS_R + 3, 0), (EyeWidget._IRIS_R - 3, 0)):
+        assert path.contains(QPointF(c.x() + dx, c.y() + dy)), (dx, dy)  # 홍채 위·아래·양옆이 윤곽 안

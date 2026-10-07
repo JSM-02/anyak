@@ -37,9 +37,9 @@ def contrast(a: str, b: str) -> float:
 
 
 def test_모든_스타일시트_틀이_두_테마_모두에서_빈칸_없이_채워진다(qapp):
-    from eyeexercise.ui import exercise_window, main_window, records_tab, reminder_popup, settings_page, vision_page
+    from eyeexercise.ui import exercise_window, records_tab, reminder_popup, settings_page, vision_page
 
-    for module in (exercise_window, main_window, records_tab, reminder_popup, settings_page, vision_page):
+    for module in (exercise_window, records_tab, reminder_popup, settings_page, vision_page):
         for dark in (False, True):
             theme.set_dark(dark)
             assert "$" not in theme.render(module._STYLE), module.__name__
@@ -79,8 +79,8 @@ def test_다크에서_화면이_실제로_어둡게_칠해진다(qapp):
     window = MainWindow(History(), settings_manager=SettingsManager(Settings()))
     theme.set_dark(True)
     window.resize(1000, 700)
-    for row in range(window._nav.count()):
-        window._nav.setCurrentRow(row)
+    for row in range(window.sidebar.count()):
+        window.sidebar.set_current(row)
         image = window.grab().toImage()
         # 본문 한가운데와 왼쪽 메뉴 아래쪽 바탕이 어두워야 한다
         assert QColor(image.pixel(900, 20)).lightness() < 100, row

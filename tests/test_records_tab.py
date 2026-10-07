@@ -351,7 +351,7 @@ def test_하루_흐름이_실제로_그려진다(qapp):
     color = image.pixelColor(int(used.left()) + 3, int(used.bottom()) - 3)
     assert color.green() > color.red() + 20  # 스크린 타임이 있는 칸은 초록 계열
     empty = chart.cell_rect(0, 7)
-    assert image.pixelColor(int(empty.left()) + 3, int(empty.bottom()) - 3).name() == "#f1f3f4"  # 쓰지 않은 시간은 빈 칸
+    assert image.pixelColor(int(empty.left()) + 3, int(empty.bottom()) - 3).name() == "#dfebe6"  # 쓰지 않은 시간은 빈 칸
 
     done_cell = chart.cell_rect(0, 14)  # 눈 운동 1회: 칸 가운데에 숫자 "1"이 그려진다
     dark = sum(
@@ -364,10 +364,10 @@ def test_하루_흐름이_실제로_그려진다(qapp):
 
     rest_cell = chart.cell_rect(0, 16)  # 눈 휴식은 칸에 숫자를 쓰지 않는다 (20분마다라 너무 많아진다)
     flat = {image.pixelColor(x, y).name() for x in range(int(rest_cell.left()) + 2, int(rest_cell.right()) - 2) for y in range(int(rest_cell.top()) + 2, int(rest_cell.bottom()) - 2)}
-    assert flat == {"#f1f3f4"}
+    assert flat == {"#dfebe6"}
     skipped_cell = chart.cell_rect(0, 11)  # 건너뜀·미룸도 칸 귀퉁이에 점을 그리지 않는다 (줄 오른쪽 요약과 마우스 설명으로만)
     corner = image.pixelColor(int(skipped_cell.right() - 4), int(skipped_cell.top() + 4))
-    assert corner.name() == "#f1f3f4"
+    assert corner.name() == "#dfebe6"
 
 
 def test_기간과_상관없이_하루_흐름은_그대로다(qapp):
@@ -418,7 +418,7 @@ def test_선택한_막대는_새로_그려도_유지된다(qapp):
 
 def test_메인_창에_기록_탭이_있다(qapp):
     window = MainWindow()
-    assert window._nav.item(0).text() == "기록"
+    assert window.sidebar.label(0) == "기록"
     assert window._stack.widget(0) is window.records_tab
 
 
@@ -475,24 +475,24 @@ def test_무시된_요청과_중단은_기록이_바뀌었다고_알리지_않�
 
 def test_왼쪽_메뉴에_기록_설정_시력_기록이_있다(qapp):
     window = MainWindow()
-    assert [window._nav.item(i).text() for i in range(window._nav.count())] == ["기록", "설정", "시력 기록"]
-    assert window._nav.currentRow() == 0 and window._stack.currentWidget() is window.records_tab
+    assert [window.sidebar.label(i) for i in range(window.sidebar.count())] == ["기록", "시력 기록", "설정"]
+    assert window.sidebar.current() == 0 and window._stack.currentWidget() is window.records_tab
 
 
 def test_메뉴를_고르면_본문이_바뀐다(qapp):
     window = MainWindow()
-    window._nav.setCurrentRow(1)
+    window.sidebar.set_current(1)
     assert window._stack.currentIndex() == 1 and window._stack.currentWidget() is not window.records_tab
-    window._nav.setCurrentRow(2)
+    window.sidebar.set_current(2)
     assert window._stack.currentIndex() == 2
-    window._nav.setCurrentRow(0)
+    window.sidebar.set_current(0)
     assert window._stack.currentWidget() is window.records_tab
 
 
 def test_설정과_시력_기록_메뉴는_각각_실제_화면이다(qapp):
     window = MainWindow()
-    assert window._stack.widget(1) is window.settings_page
-    assert window._stack.widget(2) is window.vision_page
+    assert window._stack.widget(1) is window.vision_page
+    assert window._stack.widget(2) is window.settings_page
 
 
 def test_메인_창은_넓은_데스크톱_크기로_뜨고_더_작아지지_않는다(qapp):

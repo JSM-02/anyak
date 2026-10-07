@@ -65,6 +65,24 @@ class EyeWidget(QWidget):
 
     _IRIS_R = 31.0
     _PUPIL_R = 13.0
+    _LOWER_LID = 0.8  # 아래 눈꺼풀이 위 눈꺼풀의 몇 배만큼 움직이는지 (1이면 위아래 대칭)
+    _CURVE_PEAK = 0.75  # 3차 곡선의 가운데 높이는 조절점 높이의 3/4이다
+
+    @staticmethod
+    def _sag(eased: float) -> float:
+        return 9.0 * (1 - eased)  # 감을수록 눈꼬리 선이 아래로 처진다
+
+    def iris_center(self) -> QPointF:
+        """홍채·동공의 위치. 눈꺼풀 사이로 열린 부분의 한가운데에 둔다 (눈꼬리 선이 아니라).
+
+        위 눈꺼풀과 아래 눈꺼풀이 움직이는 양이 달라서, 눈꼬리 선에 그리면 눈이 아래를 보는 것처럼 보인다.
+        """
+        e = _ease(self._openness)
+        cy = self.height() / 2
+        reach = min(self.height() * 0.4, 58.0) * 1.35
+        top = -reach * e  # 위 눈꺼풀이 올라간 만큼 (눈꼬리 선 기준)
+        bottom = reach * e * self._LOWER_LID
+        return QPointF(self.width() / 2, cy + self._sag(e) * self._CURVE_PEAK + (top + bottom) / 2 * self._CURVE_PEAK)
 
     def __init__(self) -> None:
         super().__init__()
@@ -81,9 +99,9 @@ class EyeWidget(QWidget):
         cx, cy = self.width() / 2, self.height() / 2
         half_w = min(self.width() * 0.4, 110.0)
         reach = min(self.height() * 0.4, 58.0) * 1.35  # 3차 곡선 조절점 높이 (실제로 올라가는 높이는 약 3/4)
-        sag = 9.0 * (1 - e)  # 감을수록 눈꼬리 선이 아래로 처진다
+        sag = self._sag(e)
         up = cy + sag - reach * e
-        down = cy + sag + reach * e * 0.55  # 아래 눈꺼풀은 덜 움직인다
+        down = cy + sag + reach * e * self._LOWER_LID  # 아래 눈꺼풀은 덜 움직인다
         path = QPainterPath()
         path.moveTo(cx - half_w, cy)
         path.cubicTo(cx - half_w * 0.45, up, cx + half_w * 0.45, up, cx + half_w, cy)
@@ -94,7 +112,7 @@ class EyeWidget(QWidget):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         e = _ease(self._openness)
-        center = QPointF(self.width() / 2, self.height() / 2)
+        center = self.iris_center()
         eye = self.lid_path()
 
         outline = QPen(theme.color("accent"), 5)

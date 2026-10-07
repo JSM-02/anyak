@@ -90,7 +90,7 @@ def test_켜진_스위치는_초록으로_보인다(qapp):
     switch.setChecked(True)
     white_card(switch)
     track = pixel(switch, 8, switch.height() // 2)  # 켜짐일 때 동그라미는 오른쪽이므로 왼쪽 끝의 트랙 색
-    assert track.name() == "#188038"
+    assert track.name() == "#2a835f"
 
 
 def test_스위치를_누르면_바뀌고_신호를_낸다(qapp):
@@ -143,7 +143,7 @@ def test_슬라이더의_채워진_부분은_초록이다(qapp):
     control.setValue(100)
     white_card(control)
     slider = control.slider
-    assert pixel(slider, int(slider.width() * 0.4), slider.height() // 2).name() == "#188038"
+    assert pixel(slider, int(slider.width() * 0.4), slider.height() // 2).name() == "#2a835f"
 
 
 def test_비활성_슬라이더도_보인다(qapp):
@@ -249,7 +249,7 @@ def test_세_컨트롤은_기본_위젯을_쓰지_않는다(qapp):
 
 
 def _is_accent(color: QColor) -> bool:
-    return color.red() < 100 and color.green() > color.red() + 40 and color.green() > color.blue() + 40  # 손잡이 테두리 초록(#188038)
+    return color.red() < 100 and color.green() > color.red() + 40 and color.green() > color.blue() + 20  # 손잡이 테두리 초록(#2A835F)
 
 
 def _is_white(color: QColor) -> bool:
