@@ -186,3 +186,52 @@ def vision_from_dict(data: Any) -> list[VisionRecord]:
         seen.add(r.id)
         result.append(r)
     return result
+
+
+# ---- 입력 화면용 변환 (문자열 → 값, 추이 계산). Qt 없이 테스트할 수 있게 여기 둔다 ----
+
+
+def parse_date_text(text: str) -> date:
+    """'2026-09-20' 또는 '2026.9.20' 같은 입력을 날짜로. 잘못되면 ValueError."""
+    parts = text.strip().replace(".", "-").replace("/", "-").split("-")
+    parts = [p for p in parts if p]
+    try:
+        if len(parts) != 3:
+            raise ValueError
+        return date(*(int(p) for p in parts))
+    except ValueError:
+        raise ValueError("검사일은 2026-09-20 같은 형식으로 입력해 주세요.") from None
+
+
+def parse_acuity_text(text: str, name: str) -> float | None:
+    """시력 입력칸의 글자를 값으로. 빈 칸은 None(측정 안 함), 숫자가 아니면 ValueError."""
+    text = text.strip().replace(",", ".")
+    if not text:
+        return None
+    try:
+        value = float(text)
+    except ValueError:
+        raise ValueError(f"{name} 시력은 0.8처럼 숫자로 입력해 주세요.") from None
+    return _acuity(value, name)
+
+
+def trend_deltas(records: Iterable[VisionRecord]) -> dict[str, tuple[float | None, float | None]]:
+    """기록마다 (왼쪽 변화, 오른쪽 변화)를 계산한다. id → 값.
+
+    같은 종류(나안끼리, 교정끼리)의 바로 앞 검사와 비교한다. 비교할 이전 값이 없으면 None.
+    """
+    ordered = sorted(enumerate(records), key=lambda p: (p[1].date, p[0]))
+    last: dict[tuple[bool, str], float] = {}
+    result: dict[str, tuple[float | None, float | None]] = {}
+    for _, r in ordered:
+        deltas: list[float | None] = []
+        for eye, value in (("left", r.left), ("right", r.right)):
+            key = (r.corrected, eye)
+            if value is None:
+                deltas.append(None)
+                continue
+            previous = last.get(key)
+            deltas.append(None if previous is None else round(value - previous, 2))
+            last[key] = value
+        result[r.id] = (deltas[0], deltas[1])
+    return result

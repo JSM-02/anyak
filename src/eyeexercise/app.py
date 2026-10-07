@@ -14,6 +14,7 @@ from eyeexercise.core.scheduler import ReminderScheduler, State
 from eyeexercise.core.settings import Settings
 from eyeexercise.core.settings_manager import SettingsManager
 from eyeexercise.core.usage import UsageTracker
+from eyeexercise.core.vision import VisionLog
 from eyeexercise.platform.win_idle import WinIdleSource
 from eyeexercise.platform.win_window import allow_any_process_to_set_foreground
 from eyeexercise.storage import json_store, paths
@@ -58,7 +59,14 @@ class TrayApp:
         settings_file = paths.settings_path()
         self.settings_manager = SettingsManager(settings, save=lambda s: json_store.save_settings(settings_file, s))
         self.settings_manager.subscribe(self._on_settings_changed)
-        self.main_window = MainWindow(self.history, usage=self.usage, settings_manager=self.settings_manager)
+        vision_file = paths.vision_path()
+        self.vision_log = VisionLog(
+            json_store.load_vision(vision_file),
+            save=lambda records: json_store.save_vision(vision_file, records),
+        )
+        self.main_window = MainWindow(
+            self.history, usage=self.usage, settings_manager=self.settings_manager, vision_log=self.vision_log
+        )
         self.tray = TrayIcon(self.controller, app_icon())
 
         self.controller.reminder_due.connect(self.popup.show_at_corner)

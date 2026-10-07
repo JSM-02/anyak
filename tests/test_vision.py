@@ -262,3 +262,55 @@ def test_VisionLog와_파일_저장소_연결(tmp_path):
     r = log.add(date(2026, 9, 20), 0.8, 1.0, memo="메모")
     reloaded = VisionLog(json_store.load_vision(path), today=lambda: TODAY)
     assert reloaded.records == (r,)
+
+
+# ---- 입력 화면용 변환 ----
+
+
+def test_날짜_글자를_여러_형식으로_읽는다():
+    from eyeexercise.core.vision import parse_date_text
+
+    assert parse_date_text("2026-09-20") == date(2026, 9, 20)
+    assert parse_date_text(" 2026.9.5 ") == date(2026, 9, 5)
+    assert parse_date_text("2026/09/05") == date(2026, 9, 5)
+
+
+@pytest.mark.parametrize("text", ["", "abc", "2026-13-01", "2026-09", "2026-02-30"])
+def test_잘못된_날짜_글자는_거부한다(text):
+    from eyeexercise.core.vision import parse_date_text
+
+    with pytest.raises(ValueError, match="검사일"):
+        parse_date_text(text)
+
+
+def test_시력_글자를_읽는다():
+    from eyeexercise.core.vision import parse_acuity_text
+
+    assert parse_acuity_text("0.8", "왼쪽") == 0.8
+    assert parse_acuity_text(" 1,2 ", "왼쪽") == 1.2  # 쉼표 소수점
+    assert parse_acuity_text("", "왼쪽") is None  # 빈 칸은 측정 안 함
+    assert parse_acuity_text("0", "왼쪽") == 0.0
+
+
+@pytest.mark.parametrize("text", ["abc", "2.5", "-0.1", "nan"])
+def test_잘못된_시력_글자는_거부한다(text):
+    from eyeexercise.core.vision import parse_acuity_text
+
+    with pytest.raises(ValueError, match="오른쪽 시력"):
+        parse_acuity_text(text, "오른쪽")
+
+
+def test_추이는_같은_종류의_바로_앞_검사와_비교한다():
+    from eyeexercise.core.vision import trend_deltas
+
+    records = [
+        VisionRecord("a", date(2026, 1, 1), 0.8, 1.0, False),
+        VisionRecord("b", date(2026, 3, 1), 0.7, None, False),
+        VisionRecord("c", date(2026, 4, 1), 1.0, 1.2, True),  # 교정은 나안과 따로 비교한다
+        VisionRecord("d", date(2026, 5, 1), 0.7, 1.0, False),
+    ]
+    d = trend_deltas(records)
+    assert d["a"] == (None, None)
+    assert d["b"] == (-0.1, None)
+    assert d["c"] == (None, None)
+    assert d["d"] == (0.0, 0.0)  # 오른쪽은 b에 값이 없어 그 앞(a)의 1.0과 비교한다
