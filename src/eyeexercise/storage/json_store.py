@@ -8,6 +8,7 @@ from pathlib import Path
 
 from eyeexercise.core.history import HistoryEvent, history_from_dict, history_to_dict
 from eyeexercise.core.settings import Settings, settings_from_dict, settings_to_dict
+from eyeexercise.core.usage import UsageLog, usage_from_dict, usage_to_dict
 from eyeexercise.core.vision import VisionRecord, vision_from_dict, vision_to_dict
 
 
@@ -76,3 +77,11 @@ def load_vision(path: Path, now: Callable[[], datetime] = datetime.now) -> list[
 
 def save_vision(path: Path, records: list[VisionRecord]) -> None:
     write_json(path, vision_to_dict(records))
+
+
+def load_usage(path: Path, now: Callable[[], datetime] = datetime.now) -> UsageLog:
+    return usage_from_dict(read_json(path, now))
+
+
+def save_usage(path: Path, usage: UsageLog) -> None:
+    write_json(path, usage_to_dict(usage))

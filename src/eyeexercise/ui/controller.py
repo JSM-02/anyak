@@ -9,6 +9,7 @@ from PySide6.QtCore import QObject, QTimer, Signal
 from eyeexercise.core.clock import SystemClock
 from eyeexercise.core.history import History
 from eyeexercise.core.scheduler import InvalidTransition, ReminderDue, ReminderScheduler, State
+from eyeexercise.core.usage import UsageTracker
 
 log = logging.getLogger(__name__)
 
@@ -20,17 +21,20 @@ class Controller(QObject):
     reminder_due = Signal()
     exercise_started = Signal()
     ticked = Signal()
+    history_changed = Signal()  # 기록이 추가됐다 (기록 화면을 새로 그린다)
 
     def __init__(
         self,
         scheduler: ReminderScheduler,
         history: History | None = None,
         now: Callable[[], datetime] = SystemClock().now,
+        usage_tracker: UsageTracker | None = None,
         parent: QObject | None = None,
     ) -> None:
         super().__init__(parent)
         self._scheduler = scheduler
         self._history = history
+        self._usage = usage_tracker
         self._now = now
         self._timer = QTimer(self)
         self._timer.setInterval(TICK_INTERVAL_MS)
@@ -49,16 +53,24 @@ class Controller(QObject):
 
     def stop(self) -> None:
         self._timer.stop()
+        self.flush_usage()
+
+    def flush_usage(self) -> None:
+        """스크린 타임의 마지막 구간까지 저장한다. 앱을 끝낼 때 부른다."""
+        if self._usage is not None:
+            self._usage.flush()
 
     # ---- 사용자 동작 ----
 
     def snooze(self) -> None:
         if self._run(self._scheduler.snooze) and self._history:
             self._history.record_snoozed(self._now())
+            self.history_changed.emit()
 
     def skip(self) -> None:
         if self._run(self._scheduler.skip) and self._history:
             self._history.record_skipped(self._now())
+            self.history_changed.emit()
 
     def start_exercise(self) -> None:
         if self._run(self._scheduler.start_exercise):
@@ -68,6 +80,7 @@ class Controller(QObject):
         """운동을 끝까지 마쳤다. 기록을 남기고 타이머를 처음부터 다시 센다."""
         if self._run(self._scheduler.finish_exercise) and self._history:
             self._history.record_completed(self._now(), exercise, duration_seconds)
+            self.history_changed.emit()
 
     def abort_exercise(self) -> None:
         """운동을 중단했다. 기록은 남기지 않고 타이머만 처음부터 다시 센다."""
@@ -82,6 +95,8 @@ class Controller(QObject):
     # ---- 내부 ----
 
     def _on_tick(self) -> None:
+        if self._usage is not None:
+            self._usage.tick()
         before = self._scheduler.state
         events = self._scheduler.tick()
         self._notify_state(before)

@@ -12,6 +12,7 @@ from eyeexercise.core.exercises import build_timeline, enabled_exercises, next_e
 from eyeexercise.core.history import History
 from eyeexercise.core.scheduler import ReminderScheduler, State
 from eyeexercise.core.settings import Settings
+from eyeexercise.core.usage import UsageTracker
 from eyeexercise.platform.win_idle import WinIdleSource
 from eyeexercise.platform.win_window import allow_any_process_to_set_foreground
 from eyeexercise.storage import json_store, paths
@@ -33,20 +34,32 @@ class TrayApp:
         self._settings = settings
         self._hide_hint_shown = False
 
-        scheduler = ReminderScheduler(settings, SystemClock(), WinIdleSource())
+        clock, idle = SystemClock(), WinIdleSource()
+        scheduler = ReminderScheduler(settings, clock, idle)
         history_file = paths.history_path()
         self.history = History(
             json_store.load_history(history_file),
             save=lambda events: json_store.save_history(history_file, events),
         )
-        self.controller = Controller(scheduler, self.history)
+        usage_file = paths.usage_path()
+        self.usage = json_store.load_usage(usage_file)
+        usage_tracker = UsageTracker(
+            self.usage,
+            clock,
+            idle,
+            lambda: settings.idle_pause_minutes * 60,  # 알림 타이머가 "자리 비움"으로 보는 기준과 같다
+            save=lambda usage: json_store.save_usage(usage_file, usage),
+        )
+        self.controller = Controller(scheduler, self.history, usage_tracker=usage_tracker)
+        app.aboutToQuit.connect(self.controller.flush_usage)  # 로그오프·종료 때도 마지막 구간을 저장한다
         self.popup = ReminderPopup(settings.snooze_minutes)
         self.exercise_window = ExerciseWindow(create_speaker(settings.sound.enabled))
-        self.main_window = MainWindow()
+        self.main_window = MainWindow(self.history, usage=self.usage)
         self.tray = TrayIcon(self.controller, app_icon())
 
         self.controller.reminder_due.connect(self.popup.show_at_corner)
         self.controller.state_changed.connect(self._on_state_changed)
+        self.controller.history_changed.connect(self.main_window.records_tab.refresh)
         self.controller.exercise_started.connect(self._on_exercise_started)
 
         self.exercise_window.completed.connect(self.controller.complete_exercise)

@@ -22,3 +22,7 @@ def history_path(base_dir: Path | None = None) -> Path:
 
 def vision_path(base_dir: Path | None = None) -> Path:
     return (base_dir or app_data_dir()) / "vision.json"
+
+
+def usage_path(base_dir: Path | None = None) -> Path:
+    return (base_dir or app_data_dir()) / "usage.json"

@@ -1,21 +1,98 @@
-"""메인 창(기록·설정 대시보드). 닫으면 종료하지 않고 트레이로 숨긴다."""
+"""메인 창(기록·설정·시력 기록 대시보드). 닫으면 종료하지 않고 트레이로 숨긴다.
+
+Windows 데스크톱 앱처럼 왼쪽에 메뉴, 오른쪽에 넓은 본문을 둔다.
+"""
+
+from collections.abc import Callable
+from datetime import datetime
 
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QCloseEvent, QGuiApplication
-from PySide6.QtWidgets import QLabel, QMainWindow
+from PySide6.QtWidgets import (
+    QHBoxLayout,
+    QLabel,
+    QListWidget,
+    QMainWindow,
+    QStackedWidget,
+    QVBoxLayout,
+    QWidget,
+)
+
+from eyeexercise.core.clock import SystemClock
+from eyeexercise.core.history import History
+from eyeexercise.core.usage import UsageLog
+from eyeexercise.ui.records_tab import RecordsTab
+
+WINDOW_SIZE = (1000, 700)
+WINDOW_MIN_SIZE = (860, 560)
+SIDEBAR_WIDTH = 176
+
+_STYLE = """
+#sidebar { background: #f0f0f3; border-right: 1px solid #e0e0e4; }
+#appName { font-size: 15px; font-weight: bold; color: #202124; padding: 4px 6px 12px 6px; }
+#navList { background: transparent; border: none; outline: none; }
+#navList::item { padding: 10px 12px; border-radius: 6px; margin: 1px 0; color: #3c4043; }
+#navList::item:hover { background: #e6e6ea; }
+#navList::item:selected { background: #ffffff; color: #1a73e8; font-weight: bold; }
+#placeholder { color: #80868b; font-size: 14px; background: #f5f5f7; }
+"""
+
+# (메뉴 이름, 아직 만들지 않은 화면의 안내)
+_PAGES = (("기록", None), ("설정", "설정 화면은 다음 단계에서 추가됩니다."), ("시력 기록", "시력 기록 화면은 다음 단계에서 추가됩니다."))
 
 
 class MainWindow(QMainWindow):
     hidden_to_tray = Signal()
 
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        history: History | None = None,
+        now: Callable[[], datetime] = SystemClock().now,
+        usage: UsageLog | None = None,
+    ) -> None:
         super().__init__()
         self._quitting = False
         self.setWindowTitle("EyeExercise")
-        self.resize(640, 440)
-        placeholder = QLabel("기록과 설정 화면은 7단계에서 추가됩니다.")
-        placeholder.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.setCentralWidget(placeholder)
+        self.resize(*WINDOW_SIZE)
+        self.setMinimumSize(*WINDOW_MIN_SIZE)
+
+        self.records_tab = RecordsTab(lambda: history.events if history else (), now, usage_provider=lambda: usage or UsageLog())
+        self._stack = QStackedWidget()
+        for name, placeholder_text in _PAGES:
+            if placeholder_text is None:
+                self._stack.addWidget(self.records_tab)
+                continue
+            page = QLabel(placeholder_text)
+            page.setObjectName("placeholder")
+            page.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            self._stack.addWidget(page)
+
+        self._nav = QListWidget()
+        self._nav.setObjectName("navList")
+        self._nav.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        self._nav.addItems([name for name, _ in _PAGES])
+        self._nav.currentRowChanged.connect(self._stack.setCurrentIndex)
+        self._nav.setCurrentRow(0)
+
+        app_name = QLabel("EyeExercise")
+        app_name.setObjectName("appName")
+        sidebar = QWidget()
+        sidebar.setObjectName("sidebar")
+        sidebar.setAttribute(Qt.WidgetAttribute.WA_StyledBackground)
+        sidebar.setFixedWidth(SIDEBAR_WIDTH)
+        side_layout = QVBoxLayout(sidebar)
+        side_layout.setContentsMargins(10, 14, 10, 10)
+        side_layout.addWidget(app_name)
+        side_layout.addWidget(self._nav)
+
+        central = QWidget()
+        central.setStyleSheet(_STYLE)
+        layout = QHBoxLayout(central)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+        layout.addWidget(sidebar)
+        layout.addWidget(self._stack, stretch=1)
+        self.setCentralWidget(central)
 
     def show_and_raise(self) -> None:
         if self.isMinimized():
