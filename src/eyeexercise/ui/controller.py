@@ -64,7 +64,13 @@ class Controller(QObject):
         if self._run(self._scheduler.start_exercise):
             self.exercise_started.emit()
 
-    def finish_exercise(self) -> None:
+    def complete_exercise(self, exercise: str, duration_seconds: int) -> None:
+        """운동을 끝까지 마쳤다. 기록을 남기고 타이머를 처음부터 다시 센다."""
+        if self._run(self._scheduler.finish_exercise) and self._history:
+            self._history.record_completed(self._now(), exercise, duration_seconds)
+
+    def abort_exercise(self) -> None:
+        """운동을 중단했다. 기록은 남기지 않고 타이머만 처음부터 다시 센다."""
         self._run(self._scheduler.finish_exercise)
 
     def pause(self) -> None:

@@ -25,6 +25,8 @@ EyeExercise/
 ├─ README.md
 ├─ docs/plan.md            # 이 문서
 ├─ assets/icons/           # 트레이와 앱 아이콘 (.ico, .png)
+├─ assets/sounds/          # 운동 안내 소리 (prepare, cycle, finish, look_away .wav). tools/make_sounds.py로 만든다
+├─ tools/make_sounds.py    # 안내 소리 합성 스크립트 (표준 라이브러리만 사용). 소리를 고치거나 박자를 바꿀 때 다시 실행
 ├─ eyeexercise.spec        # PyInstaller 빌드 설정 (8단계)
 ├─ src/eyeexercise/
 │  ├─ __main__.py          # 진입점: python -m eyeexercise
@@ -109,13 +111,15 @@ src 레이아웃을 쓰는 이유: 테스트가 패키지 기준으로 import되
   "idle_pause_minutes": 1,
   "idle_reset_minutes": 5,
   "exercises": {
-    "blink":      { "enabled": true, "duration_seconds": 30 },
+    "blink":      { "enabled": true, "duration_seconds": 66 },
     "dot_follow": { "enabled": true, "duration_seconds": 60, "speed": "normal" }
   },
   "show_main_window_on_start": false,
-  "camera": { "enabled": false }
+  "camera": { "enabled": false },
+  "sound": { "enabled": true }
 }
 ```
+- `sound.enabled`: 운동 중 소리 안내. `assets/sounds/`의 파일(prepare, cycle, finish, look_away)을 재생하고, 파일이 없는 단계는 Windows 내장 한국어 음성(오프라인) → 단계별 알림음 순으로 대신한다. WAV(PCM 16bit 모노)만 지원한다. `cycle.wav`는 감기 시작에서 한 번 재생하며 감기·유지·뜨기(뜨기 알림 종소리 포함)가 한 파일에 이어져 있고, 다음 사이클과 겹치는 구간이 있어 겹쳐서 재생한다.
 - 범위를 벗어난 값은 보정한다. 예: interval은 1~120분.
 - `idle_pause_minutes`는 `idle_reset_minutes`보다 작아야 한다. 어긋나면 pause를 reset보다 작은 값으로 보정한다.
 - 모르는 키는 무시하고, 없는 키는 기본값으로 채운다.
@@ -165,10 +169,10 @@ src 레이아웃을 쓰는 이유: 테스트가 패키지 기준으로 import되
 | ✅ 3b. 유휴 감지·단일 인스턴스·메인 창 | `platform/win_idle`, `platform/win_window`, 단일 인스턴스(`QLockFile`로 첫 인스턴스 판별 + `QLocalServer`로 창 열기 신호 전달), `ui/main_window`(빈 화면, 닫으면 트레이로 숨김), 트레이 "열기" | `win_idle`이 0 이상의 값을 반환하는지 (Windows 전용 테스트). 수동 체크리스트: 입력 없이 1분 지나면 누적 정지, 5분이면 리셋, 두 번째 실행이 첫 인스턴스를 앞으로 가져옴, 창 닫아도 종료되지 않음. **확인 결과(사용자 수동 확인)**: 체크리스트 전 항목 통과, 절전 5분 후 복귀 시 타이머 리셋 확인. 복귀 후 몇 초가 지나 툴팁을 보면 `4분 58초`처럼 보이는 것은 정상(리셋 시점은 정확히 5분이며 복귀 순간부터 다시 흐름, 자동 테스트로 고정). 자동 검증: 두 프로세스 실행으로 단일 인스턴스·창 숨김/재열기·Ctrl+C 종료 확인, `GetLastInputInfo`가 입력 시 0으로 돌아오고 이후 증가함을 확인. 미확인: Windows 종료·로그오프 시 창이 종료를 막지 않는지 |
 | ✅ 4a. 운동 기록 | `core/history`(이벤트 모델, 일별 집계), `storage/json_store`에 history 읽기·쓰기, controller에서 미루기·건너뛰기 이벤트 기록 (완료 이벤트 API는 만들되 연결은 5단계) | 이벤트 추가, 일별 집계, 자정 경계(23:59와 00:01), 저장 후 다시 읽기, 손상 파일 복구 |
 | ✅ 4b. 시력 기록 | `core/vision`(모델, 검증, 날짜 정렬), `storage/json_store`에 vision 읽기·쓰기, `storage/paths.vision_path` | 값 범위(0.0~2.0)와 한쪽만 입력, 미래 날짜 거부, 같은 날 여러 건, 추가·수정·삭제, 날짜순 정렬, 저장 후 다시 읽기, 손상 파일 복구, 모르는 키·잘못된 레코드 무시. 입력 UI는 7단계 대시보드에서 만든다 |
-| 5. 깜빡임 운동 | `core/exercises`(단계 타임라인), `core/camera`(프로토콜과 NullDetector), `ui/exercise_window` | 경과 시간별 단계·안내 문구, 총 시간, 중단 처리. 카메라 없이 동작하는지 확인 |
+| ✅ 5. 깜빡임 운동 | `core/exercises`(단계 타임라인), `core/camera`(프로토콜과 NullDetector), `ui/exercise_window`(480×320, 항상 위·가운데), `ui/speech`(소리 안내: 효과음 파일 → 내장 음성 → 알림음). **심호흡처럼 천천히: 눈을 천천히 감고(2초) 잠시 머문 뒤(1초) 천천히 뜨고(2초) 숨을 돌린다(1초) = 6초 사이클, 10회가 한 세트.** 낮은 종(감기 시작)과 높은 종(뜨기 시작)은 3초 간격이다. 흐름은 준비 3초 → 사이클 반복 → 마무리 3초 → 먼 곳 바라보기 20초 카운트다운 → 자동 닫기. 기본 `duration_seconds`는 66초(10회). 깜빡임 운동이 끝나는 순간 `completed`를 기록하고, 카운트다운 중에 닫아도 완료로 센다. 설정 시간이 12초보다 짧으면 12초(사이클 1회)로 보정한다. 효과음은 `tools/make_sounds.py`로 합성한 편안한 소리(낮은 종 = 감기, 높은 종 = 뜨기)이며 사이클 파일을 겹쳐 재생해 이어 붙인다. 쉬기 구간에는 문구를 비워 둔다 | 경과 시간별 단계·안내 문구, 총 시간, 눈이 감기고 뜨는 데 각 2초 걸리는지, 두 종 사이 3초, 카운트다운(20→1)과 완료 시점, 중단 처리, 단계 전환마다 소리 한 번, 사이클 소리 겹쳐 재생·재생기 번갈아 사용, 유지·뜨기·쉬기 단계 무음, 파일 없음·재생 실패 시 폴백, 카메라 없이 동작. 수동 확인: 창 가운데 표시, 박자에 맞는 문구·애니메이션·효과음, Esc·중단 시 기록 없음, 완료 시 기록, 포커스 이동이 거슬리지 않음 (사용자 확인 완료) |
 | 6. 점 따라가기 | `core/exercises`에 경로 함수 `t → (x, y)` 추가 (0~1 정규화 좌표), 화면 렌더링 | 모든 t에서 좌표가 0~1 범위, 경로가 연속적인지, 패턴별 시작점과 끝점, 속도 설정 반영 |
 | 7. 대시보드 | `ui/main_window`의 기록 탭(오늘, 최근 7일), 시력 기록 탭(입력·수정·삭제, 좌/우 추이 목록), 설정 탭(변경 즉시 저장하고 스케줄러에 반영) | 표시용 요약 함수(최근 7일, 빈 날은 0)는 pytest로, UI는 수동으로 확인 |
-| 8. exe 빌드 | `eyeexercise.spec`, 아이콘, `--windowed` | 빌드한 exe로 수동 체크리스트: 실행, 트레이, 알림, `%APPDATA%`에 저장, 중복 실행 방지 |
+| 8. exe 빌드 | `eyeexercise.spec`, 아이콘, `assets/sounds`를 exe에 포함하고 실행 위치와 무관하게 찾도록 경로 처리(지금은 소스 기준 상대 경로), `--windowed` | 빌드한 exe로 수동 체크리스트: 실행, 트레이, 알림, `%APPDATA%`에 저장, 중복 실행 방지 |
 | 9. (나중) 카메라 | opt-in 깜빡임 감지 구현. 라이브러리와 exe 용량은 이 단계에서 결정 | 이 단계에서 별도로 설계 |
 
 GUI 자동 테스트(pytest-qt)는 지금은 넣지 않는다. 로직이 `core`에 있으므로 GUI는 수동 체크리스트로 충분하다.

@@ -8,7 +8,7 @@ def test_기본값():
     assert s.idle_pause_minutes == 1
     assert s.idle_reset_minutes == 5
     assert s.exercises.blink.enabled is True
-    assert s.exercises.blink.duration_seconds == 30
+    assert s.exercises.blink.duration_seconds == 66
     assert s.exercises.dot_follow.duration_seconds == 60
     assert s.exercises.dot_follow.speed == "normal"
     assert s.show_main_window_on_start is False
@@ -38,7 +38,7 @@ def test_모르는_키는_무시한다():
 def test_누락된_키는_기본값으로_채운다():
     s = settings_from_dict({"exercises": {"blink": {"enabled": False}}})
     assert s.exercises.blink.enabled is False
-    assert s.exercises.blink.duration_seconds == 30
+    assert s.exercises.blink.duration_seconds == 66
     assert s.interval_minutes == 20
 
 
@@ -85,3 +85,23 @@ def test_idle_reset이_최솟값이어도_pause는_1_이상():
 def test_유효한_idle_설정은_그대로_유지된다():
     s = settings_from_dict({"idle_pause_minutes": 2, "idle_reset_minutes": 10})
     assert (s.idle_pause_minutes, s.idle_reset_minutes) == (2, 10)
+
+
+def test_소리는_기본으로_켜져_있다():
+    assert Settings().sound.enabled is True
+
+
+def test_예전_설정_파일처럼_sound가_없으면_기본값으로_채운다():
+    assert settings_from_dict({"interval_minutes": 30}).sound.enabled is True
+
+
+def test_소리_설정을_끄고_저장해도_유지된다():
+    s = settings_from_dict({"sound": {"enabled": False}})
+    assert s.sound.enabled is False
+    assert settings_to_dict(s)["sound"] == {"enabled": False}
+    assert settings_from_dict(settings_to_dict(s)) == s
+
+
+def test_소리_설정_타입이_잘못되면_기본값():
+    assert settings_from_dict({"sound": {"enabled": "no"}}).sound.enabled is True
+    assert settings_from_dict({"sound": "off"}).sound.enabled is True

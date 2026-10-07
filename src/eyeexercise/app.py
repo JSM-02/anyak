@@ -15,10 +15,12 @@ from eyeexercise.platform.win_idle import WinIdleSource
 from eyeexercise.platform.win_window import allow_any_process_to_set_foreground
 from eyeexercise.storage import json_store, paths
 from eyeexercise.ui.controller import Controller
+from eyeexercise.ui.exercise_window import ExerciseWindow
 from eyeexercise.ui.icons import app_icon
 from eyeexercise.ui.main_window import MainWindow
 from eyeexercise.ui.reminder_popup import ReminderPopup
 from eyeexercise.ui.single_instance import SingleInstance
+from eyeexercise.ui.speech import create_speaker
 from eyeexercise.ui.tray import TrayIcon
 
 log = logging.getLogger(__name__)
@@ -38,12 +40,16 @@ class TrayApp:
         )
         self.controller = Controller(scheduler, self.history)
         self.popup = ReminderPopup(settings.snooze_minutes)
+        self.exercise_window = ExerciseWindow(create_speaker(settings.sound.enabled))
         self.main_window = MainWindow()
         self.tray = TrayIcon(self.controller, app_icon())
 
         self.controller.reminder_due.connect(self.popup.show_at_corner)
         self.controller.state_changed.connect(self._on_state_changed)
         self.controller.exercise_started.connect(self._on_exercise_started)
+
+        self.exercise_window.completed.connect(self.controller.complete_exercise)
+        self.exercise_window.aborted.connect(self.controller.abort_exercise)
 
         self.popup.start_clicked.connect(self.controller.start_exercise)
         self.popup.snooze_clicked.connect(self.controller.snooze)
@@ -66,6 +72,7 @@ class TrayApp:
         self.main_window.prepare_to_quit()
         self.controller.stop()
         self.popup.hide()
+        self.exercise_window.hide()
         self.tray.hide()
         self._app.quit()
 
@@ -75,9 +82,13 @@ class TrayApp:
             self.popup.hide()
 
     def _on_exercise_started(self) -> None:
-        # 임시 동작: 운동 화면은 5단계에서 추가한다. 지금은 바로 끝난 것으로 처리한다.
-        self.tray.show_message("눈 운동 화면은 아직 준비 중이에요. 타이머를 다시 시작합니다.")
-        self.controller.finish_exercise()
+        # 지금은 깜빡임 운동만 있다. 점 따라가기는 6단계에서 추가한다.
+        blink = self._settings.exercises.blink
+        if not blink.enabled:
+            self.tray.show_message("사용할 수 있는 운동이 없어요. 설정에서 깜빡임 운동을 켜 주세요.")
+            self.controller.abort_exercise()
+            return
+        self.exercise_window.start(blink.duration_seconds)
 
     def _on_hidden_to_tray(self) -> None:
         # 창이 사라져서 당황하지 않도록, 실행 중 처음 한 번만 알려준다.
