@@ -6,6 +6,7 @@ from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
 
+from eyeexercise.core.history import HistoryEvent, history_from_dict, history_to_dict
 from eyeexercise.core.settings import Settings, settings_from_dict, settings_to_dict
 
 
@@ -58,3 +59,11 @@ def load_settings(path: Path, now: Callable[[], datetime] = datetime.now) -> Set
 
 def save_settings(path: Path, settings: Settings) -> None:
     write_json(path, settings_to_dict(settings))
+
+
+def load_history(path: Path, now: Callable[[], datetime] = datetime.now) -> list[HistoryEvent]:
+    return history_from_dict(read_json(path, now))
+
+
+def save_history(path: Path, events: list[HistoryEvent]) -> None:
+    write_json(path, history_to_dict(events))

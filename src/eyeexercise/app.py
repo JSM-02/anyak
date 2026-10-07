@@ -8,6 +8,7 @@ from PySide6.QtCore import QTimer
 from PySide6.QtWidgets import QApplication, QSystemTrayIcon
 
 from eyeexercise.core.clock import SystemClock
+from eyeexercise.core.history import History
 from eyeexercise.core.scheduler import ReminderScheduler, State
 from eyeexercise.core.settings import Settings
 from eyeexercise.platform.win_idle import WinIdleSource
@@ -30,7 +31,12 @@ class TrayApp:
         self._hide_hint_shown = False
 
         scheduler = ReminderScheduler(settings, SystemClock(), WinIdleSource())
-        self.controller = Controller(scheduler)
+        history_file = paths.history_path()
+        self.history = History(
+            json_store.load_history(history_file),
+            save=lambda events: json_store.save_history(history_file, events),
+        )
+        self.controller = Controller(scheduler, self.history)
         self.popup = ReminderPopup(settings.snooze_minutes)
         self.main_window = MainWindow()
         self.tray = TrayIcon(self.controller, app_icon())

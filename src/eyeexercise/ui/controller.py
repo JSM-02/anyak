@@ -1,9 +1,13 @@
 """스케줄러와 UI를 잇는 컨트롤러. 1초마다 tick()을 부르고 결과를 Qt 시그널로 알린다."""
 
 import logging
+from collections.abc import Callable
+from datetime import datetime
 
 from PySide6.QtCore import QObject, QTimer, Signal
 
+from eyeexercise.core.clock import SystemClock
+from eyeexercise.core.history import History
 from eyeexercise.core.scheduler import InvalidTransition, ReminderDue, ReminderScheduler, State
 
 log = logging.getLogger(__name__)
@@ -17,9 +21,17 @@ class Controller(QObject):
     exercise_started = Signal()
     ticked = Signal()
 
-    def __init__(self, scheduler: ReminderScheduler, parent: QObject | None = None) -> None:
+    def __init__(
+        self,
+        scheduler: ReminderScheduler,
+        history: History | None = None,
+        now: Callable[[], datetime] = SystemClock().now,
+        parent: QObject | None = None,
+    ) -> None:
         super().__init__(parent)
         self._scheduler = scheduler
+        self._history = history
+        self._now = now
         self._timer = QTimer(self)
         self._timer.setInterval(TICK_INTERVAL_MS)
         self._timer.timeout.connect(self._on_tick)
@@ -41,10 +53,12 @@ class Controller(QObject):
     # ---- 사용자 동작 ----
 
     def snooze(self) -> None:
-        self._run(self._scheduler.snooze)
+        if self._run(self._scheduler.snooze) and self._history:
+            self._history.record_snoozed(self._now())
 
     def skip(self) -> None:
-        self._run(self._scheduler.skip)
+        if self._run(self._scheduler.skip) and self._history:
+            self._history.record_skipped(self._now())
 
     def start_exercise(self) -> None:
         if self._run(self._scheduler.start_exercise):
