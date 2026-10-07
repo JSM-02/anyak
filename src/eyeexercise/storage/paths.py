@@ -18,3 +18,7 @@ def settings_path(base_dir: Path | None = None) -> Path:
 
 def history_path(base_dir: Path | None = None) -> Path:
     return (base_dir or app_data_dir()) / "history.json"
+
+
+def vision_path(base_dir: Path | None = None) -> Path:
+    return (base_dir or app_data_dir()) / "vision.json"
