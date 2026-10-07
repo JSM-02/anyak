@@ -1,10 +1,13 @@
-"""운동 정의와 단계 타임라인 (GUI와 시간 의존 없음).
+"""눈 휴식과 눈 운동의 정의와 단계 타임라인 (GUI와 시간 의존 없음).
 
 화면은 `step_at(경과 초)`가 돌려주는 값을 그리기만 한다.
 
-흐름: 운동(준비 → 본 운동 → 마무리, 총 `total_seconds`)이 끝나면 곧바로
-먼 곳 바라보기(20초 카운트다운)가 이어지고, 그것까지 끝나면 `done`이 된다.
-운동은 두 가지다. 깜빡임 운동(`blink_timeline`)과 점 따라가기(`dot_follow_timeline`).
+- **눈 휴식**(`rest_timeline`): 20분마다. 깜빡임(`blink_timeline`)이 끝나면 곧바로 먼 곳 바라보기(20초 카운트다운)가
+  이어진다. 깜빡임을 끄면 먼 곳 바라보기만 한다(`LookAwayTimeline`).
+- **눈 운동**(`exercise_timeline`): 하루 1~2회. 점 따라가기(`dot_follow_timeline`) 뒤에도 먼 곳 바라보기가 이어진다.
+
+타임라인은 모두 본 활동(준비 → 본 활동 → 마무리, 총 `total_seconds`) 뒤에 먼 곳 바라보기가 오고,
+그것까지 끝나면 `done`이 된다.
 """
 
 import math
@@ -269,7 +272,35 @@ def dot_follow_timeline(duration_seconds: int, speed: str = "normal") -> DotFoll
     return DotFollowTimeline(total_seconds=total, speed_hz=DOT_SPEED_HZ.get(speed, DOT_SPEED_HZ["normal"]), segments=segments)
 
 
-# ---- 운동 선택 ----
+# ---- 먼 곳 바라보기만 하는 휴식 ----
+
+
+@dataclass(frozen=True)
+class LookAwayTimeline:
+    """깜빡임 없이 먼 곳 바라보기(20초)만 하는 휴식. 본 활동의 길이가 0초다."""
+
+    exercise: ClassVar[str] = EXERCISE_BLINK  # 기록은 깜빡임과 같은 '휴식'으로 남는다
+    total_seconds: int = 0
+
+    def step_at(self, elapsed: float) -> ExerciseStep:
+        return _look_away_step(max(0.0, elapsed), None)
+
+
+# ---- 휴식·운동 선택 ----
+
+
+def rest_timeline(settings: ExercisesSettings) -> BlinkTimeline | LookAwayTimeline:
+    """눈 휴식의 타임라인. 깜빡임이 켜져 있으면 깜빡임 + 먼 곳 바라보기, 꺼져 있으면 먼 곳 바라보기만."""
+    if settings.blink.enabled:
+        return blink_timeline(settings.blink.duration_seconds)
+    return LookAwayTimeline()
+
+
+def exercise_timeline(settings: ExercisesSettings) -> DotFollowTimeline | None:
+    """눈 운동(점 따라가기)의 타임라인. 꺼져 있으면 None."""
+    if not settings.dot_follow.enabled:
+        return None
+    return dot_follow_timeline(settings.dot_follow.duration_seconds, settings.dot_follow.speed)
 
 
 def enabled_exercises(settings: ExercisesSettings) -> list[str]:
@@ -295,21 +326,21 @@ def build_timeline(exercise: str, settings: ExercisesSettings) -> BlinkTimeline 
     raise ValueError(f"알 수 없는 운동: {exercise}")
 
 
-# ---- 운동 길이 프리셋 (설정 화면에서 "짧게/보통/길게"로 고른다) ----
+# ---- 길이 프리셋 (설정 화면에서 "짧게/보통/길게"로 고른다) ----
 
 
 @dataclass(frozen=True)
 class LengthPreset:
     key: str
     label: str
-    blink_cycles: int  # 깜빡임 사이클(회) 수
-    dot_seconds: int  # 점 따라가기 총 시간(초)
+    blink_cycles: int  # 휴식의 깜빡임 사이클(회) 수
+    dot_seconds: int  # 운동(점 따라가기) 총 시간(초)
 
 
 LENGTH_PRESETS = (
-    LengthPreset("short", "짧게", 5, 30),
-    LengthPreset("normal", "보통", 10, 60),  # 현재 기본값과 같다: 깜빡임 10회(66초) + 점 따라가기 1분
-    LengthPreset("long", "길게", 15, 90),
+    LengthPreset("short", "짧게", 2, 30),
+    LengthPreset("normal", "보통", 3, 60),  # 기본값과 같다: 휴식의 깜빡임 3회(24초) + 점 따라가기 1분
+    LengthPreset("long", "길게", 5, 90),
 )
 
 

@@ -14,12 +14,13 @@ IDLE_PAUSE_MINUTES_RANGE = (1, 59)
 IDLE_RESET_MINUTES_RANGE = (2, 120)
 BLINK_SECONDS_RANGE = (5, 300)
 DOT_FOLLOW_SECONDS_RANGE = (10, 600)
+DAILY_GOAL_RANGE = (0, 5)  # 하루 눈 운동 목표 횟수. 0이면 운동을 제안하지 않는다
 
 
 @dataclass(frozen=True)
 class BlinkSettings:
     enabled: bool = True
-    duration_seconds: int = 66  # 준비 3 + 사이클 10회(6초씩) + 마무리 3 = 한 세트
+    duration_seconds: int = 24  # 준비 3 + 사이클 3회(6초씩) + 마무리 3. 눈 '휴식'의 깜빡임 부분이다
 
 
 @dataclass(frozen=True)
@@ -31,8 +32,9 @@ class DotFollowSettings:
 
 @dataclass(frozen=True)
 class ExercisesSettings:
-    blink: BlinkSettings = field(default_factory=BlinkSettings)
-    dot_follow: DotFollowSettings = field(default_factory=DotFollowSettings)
+    blink: BlinkSettings = field(default_factory=BlinkSettings)  # 눈 휴식(깜빡임 + 먼 곳 바라보기). enabled가 꺼지면 먼 곳 바라보기만 한다
+    dot_follow: DotFollowSettings = field(default_factory=DotFollowSettings)  # 눈 운동
+    daily_goal: int = 2  # 하루 눈 운동 목표 횟수
 
 
 @dataclass(frozen=True)
@@ -100,6 +102,7 @@ def settings_from_dict(data: Any) -> Settings:
         idle_pause_minutes=idle_pause,
         idle_reset_minutes=idle_reset,
         exercises=ExercisesSettings(
+            daily_goal=_int(raw_ex.get("daily_goal"), d.exercises.daily_goal, DAILY_GOAL_RANGE),
             blink=BlinkSettings(
                 enabled=_bool(raw_blink.get("enabled"), d.exercises.blink.enabled),
                 duration_seconds=_int(
@@ -130,6 +133,7 @@ def settings_to_dict(settings: Settings) -> dict:
         "idle_pause_minutes": settings.idle_pause_minutes,
         "idle_reset_minutes": settings.idle_reset_minutes,
         "exercises": {
+            "daily_goal": settings.exercises.daily_goal,
             "blink": {
                 "enabled": settings.exercises.blink.enabled,
                 "duration_seconds": settings.exercises.blink.duration_seconds,

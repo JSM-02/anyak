@@ -324,7 +324,7 @@ def test_프리셋은_짧게_보통_길게_세_가지():
     from eyeexercise.core.exercises import LENGTH_PRESETS
 
     assert [(p.key, p.label) for p in LENGTH_PRESETS] == [("short", "짧게"), ("normal", "보통"), ("long", "길게")]
-    assert [(p.blink_cycles, p.dot_seconds) for p in LENGTH_PRESETS] == [(5, 30), (10, 60), (15, 90)]
+    assert [(p.blink_cycles, p.dot_seconds) for p in LENGTH_PRESETS] == [(2, 30), (3, 60), (5, 90)]
 
 
 def test_보통은_현재_기본_설정과_같다():
@@ -363,9 +363,9 @@ def test_프리셋을_고르면_두_운동의_시간이_함께_바뀐다():
     from eyeexercise.core.settings import Settings, with_changes
 
     s = with_changes(Settings(), preset_changes("long"))
-    assert s.exercises.blink.duration_seconds == 96 and s.exercises.dot_follow.duration_seconds == 90
+    assert s.exercises.blink.duration_seconds == 36 and s.exercises.dot_follow.duration_seconds == 90
     s = with_changes(Settings(), preset_changes("short"))
-    assert s.exercises.blink.duration_seconds == 36 and s.exercises.dot_follow.duration_seconds == 30
+    assert s.exercises.blink.duration_seconds == 18 and s.exercises.dot_follow.duration_seconds == 30
 
 
 def test_모든_프리셋의_값은_설정_범위를_벗어나지_않아_보정되지_않는다():

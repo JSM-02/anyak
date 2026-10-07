@@ -210,3 +210,73 @@ def test_기록_순서가_아니라_시각이_가장_늦은_것을_기준으로_
         ]
     )
     assert h.last_completed_exercise() == "dot_follow"
+
+
+# ---- 휴식·운동 구분 (7.6a) ----
+
+
+def test_완료는_운동_종류로_휴식인지_운동인지_구분한다():
+    from eyeexercise.core.history import ACTIVITY_EXERCISE, ACTIVITY_REST, activity_of
+
+    assert activity_of(HistoryEvent(kst(2026, 10, 6, 9), "completed", "blink", 24)) == ACTIVITY_REST
+    assert activity_of(HistoryEvent(kst(2026, 10, 6, 9), "completed", "dot_follow", 60)) == ACTIVITY_EXERCISE
+    assert activity_of(HistoryEvent(kst(2026, 10, 6, 9), "completed", "jumping", 10)) == ACTIVITY_EXERCISE  # 모르는 운동은 운동
+
+
+def test_건너뜀과_미룸은_저장한_활동을_따른다():
+    from eyeexercise.core.history import ACTIVITY_EXERCISE, ACTIVITY_REST, activity_of
+
+    h = History()
+    h.record_skipped(kst(2026, 10, 6, 9))  # 기본은 휴식 알림
+    h.record_snoozed(kst(2026, 10, 6, 10), ACTIVITY_EXERCISE)
+    assert [activity_of(e) for e in h.events] == [ACTIVITY_REST, ACTIVITY_EXERCISE]
+
+
+def test_알_수_없는_활동은_거부한다():
+    import pytest
+
+    with pytest.raises(ValueError, match="알 수 없는 활동"):
+        History().record_skipped(kst(2026, 10, 6, 9), "sleep")
+
+
+def test_활동_구분이_없는_옛_건너뜀과_미룸은_집계에서_빠지지만_파일에는_남는다():
+    old_skipped = HistoryEvent(kst(2026, 10, 6, 9), "skipped")
+    old_snoozed = HistoryEvent(kst(2026, 10, 6, 9, 5), "snoozed")
+    done = HistoryEvent(kst(2026, 10, 6, 9, 10), "completed", "blink", 24)
+    saved = []
+    h = History([old_skipped, old_snoozed, done], save=lambda events: saved.append(list(events)))
+    assert h.events == (done,)  # 집계·화면에 쓰는 목록
+    assert h.summarize(KST)[date(2026, 10, 6)].skipped == 0
+
+    h.record_skipped(kst(2026, 10, 6, 11))
+    assert [e.type for e in h.events] == ["completed", "skipped"]
+    assert saved[-1][:3] == [old_skipped, old_snoozed, done]  # 저장할 때는 옛 기록도 그대로 쓴다
+
+
+def test_활동은_파일에_저장되고_다시_읽는다():
+    events = [
+        HistoryEvent(kst(2026, 10, 6, 9), "skipped", activity="rest"),
+        HistoryEvent(kst(2026, 10, 6, 10), "snoozed", activity="exercise"),
+        HistoryEvent(kst(2026, 10, 6, 11), "completed", "dot_follow", 60),
+    ]
+    data = history_to_dict(events)
+    assert data["events"][0]["activity"] == "rest" and "activity" not in data["events"][2]
+    assert history_from_dict(data) == events
+
+
+def test_알_수_없는_활동_값은_없는_것으로_읽는다():
+    events = history_from_dict({"events": [{"ts": "2026-10-06T09:00:00+09:00", "type": "skipped", "activity": "sleep"}]})
+    assert events[0].activity is None
+
+
+def test_옛_기록_파일도_그대로_읽고_저장해도_보존된다(tmp_path):
+    path = tmp_path / "history.json"
+    path.write_text(
+        '{"version": 1, "events": [{"ts": "2026-10-06T09:00:00+09:00", "type": "skipped"}, '
+        '{"ts": "2026-10-06T09:10:00+09:00", "type": "completed", "exercise": "blink", "duration_seconds": 24}]}',
+        encoding="utf-8",
+    )
+    h = History(json_store.load_history(path), save=lambda events: json_store.save_history(path, events))
+    assert [e.type for e in h.events] == ["completed"]
+    h.record_skipped(kst(2026, 10, 6, 12))
+    assert [e.type for e in json_store.load_history(path)] == ["skipped", "completed", "skipped"]  # 옛 건너뜀도 파일에 남아 있다

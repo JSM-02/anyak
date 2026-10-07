@@ -1,4 +1,8 @@
-"""운동 기록 모델. 이벤트 단위로 쌓고, 일별 집계는 여기서 계산한다 (파일 I/O 없음).
+"""휴식·운동 기록 모델. 이벤트 단위로 쌓고, 일별 집계는 여기서 계산한다 (파일 I/O 없음).
+
+눈 휴식(깜빡임 + 먼 곳 바라보기)과 눈 운동(점 따라가기)을 구분한다. 완료 이벤트는 운동 종류(`exercise`)로,
+건너뜀·미룸은 `activity`에 저장한 값으로 구분한다. `activity`가 없는 옛 건너뜀·미룸은 휴식인지 운동인지
+알 수 없어서 `events`(집계에 쓰는 목록)에서 빠진다. 파일에는 그대로 남는다.
 
 저장은 주입받은 `save` 콜백이 맡는다. core는 파일을 모르고, 저장 실패가 앱을 멈추게 하지도 않는다.
 """
@@ -9,6 +13,8 @@ from dataclasses import dataclass
 from datetime import date, datetime, tzinfo
 from typing import Any
 
+from eyeexercise.core.exercises import EXERCISE_BLINK
+
 log = logging.getLogger(__name__)
 
 HISTORY_VERSION = 1
@@ -17,6 +23,10 @@ EVENT_SNOOZED = "snoozed"
 EVENT_SKIPPED = "skipped"
 EVENT_TYPES = (EVENT_COMPLETED, EVENT_SNOOZED, EVENT_SKIPPED)
 
+ACTIVITY_REST = "rest"  # 눈 휴식: 깜빡임 + 먼 곳 바라보기
+ACTIVITY_EXERCISE = "exercise"  # 눈 운동: 점 따라가기
+ACTIVITIES = (ACTIVITY_REST, ACTIVITY_EXERCISE)
+
 
 @dataclass(frozen=True)
 class HistoryEvent:
@@ -24,6 +34,17 @@ class HistoryEvent:
     type: str
     exercise: str | None = None
     duration_seconds: int | None = None
+    activity: str | None = None  # 건너뜀·미룸이 휴식인지 운동인지. 완료 이벤트는 exercise로 알 수 있어 저장하지 않는다
+
+
+def activity_of(event: HistoryEvent) -> str | None:
+    """이벤트가 휴식(rest)인지 운동(exercise)인지. 옛 건너뜀·미룸처럼 알 수 없으면 None.
+
+    완료는 깜빡임이면 휴식, 그 밖의 운동(점 따라가기 등)은 운동이다.
+    """
+    if event.type == EVENT_COMPLETED:
+        return ACTIVITY_REST if event.exercise == EXERCISE_BLINK else ACTIVITY_EXERCISE
+    return event.activity
 
 
 @dataclass(frozen=True)
@@ -64,19 +85,20 @@ class History:
 
     @property
     def events(self) -> tuple[HistoryEvent, ...]:
-        return tuple(self._events)
+        """집계와 화면에 쓰는 기록. 휴식인지 운동인지 알 수 없는 옛 건너뜀·미룸은 뺀다."""
+        return tuple(e for e in self._events if e.type == EVENT_COMPLETED or e.activity is not None)
 
     def record_completed(self, ts: datetime, exercise: str, duration_seconds: int) -> None:
         self._append(HistoryEvent(ts, EVENT_COMPLETED, exercise, max(0, duration_seconds)))
 
-    def record_snoozed(self, ts: datetime) -> None:
-        self._append(HistoryEvent(ts, EVENT_SNOOZED))
+    def record_snoozed(self, ts: datetime, activity: str = ACTIVITY_REST) -> None:
+        self._append(HistoryEvent(ts, EVENT_SNOOZED, activity=_valid_activity(activity)))
 
-    def record_skipped(self, ts: datetime) -> None:
-        self._append(HistoryEvent(ts, EVENT_SKIPPED))
+    def record_skipped(self, ts: datetime, activity: str = ACTIVITY_REST) -> None:
+        self._append(HistoryEvent(ts, EVENT_SKIPPED, activity=_valid_activity(activity)))
 
     def summarize(self, tz: tzinfo | None = None) -> dict[date, DailySummary]:
-        return summarize_by_day(self._events, tz)
+        return summarize_by_day(self.events, tz)
 
     def last_completed_exercise(self) -> str | None:
         """가장 최근에 끝까지 마친 운동의 이름. 운동을 번갈아 고를 때 쓴다."""
@@ -94,6 +116,12 @@ class History:
             log.warning("기록 저장에 실패했습니다.", exc_info=True)
 
 
+def _valid_activity(activity: str) -> str:
+    if activity not in ACTIVITIES:
+        raise ValueError(f"알 수 없는 활동: {activity}")
+    return activity
+
+
 def history_to_dict(events: Iterable[HistoryEvent]) -> dict:
     items = []
     for e in events:
@@ -102,6 +130,8 @@ def history_to_dict(events: Iterable[HistoryEvent]) -> dict:
             item["exercise"] = e.exercise
         if e.duration_seconds is not None:
             item["duration_seconds"] = e.duration_seconds
+        if e.activity is not None:
+            item["activity"] = e.activity
         items.append(item)
     return {"version": HISTORY_VERSION, "events": items}
 
@@ -122,7 +152,10 @@ def _event_from_dict(raw: Any) -> HistoryEvent | None:
     duration = raw.get("duration_seconds")
     if isinstance(duration, bool) or not isinstance(duration, int) or duration < 0:
         duration = None
-    return HistoryEvent(ts, raw["type"], exercise, duration)
+    activity = raw.get("activity")
+    if activity not in ACTIVITIES:
+        activity = None
+    return HistoryEvent(ts, raw["type"], exercise, duration, activity)
 
 
 def history_from_dict(data: Any) -> list[HistoryEvent]:

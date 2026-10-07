@@ -24,6 +24,7 @@ from eyeexercise.core.exercises import (
 )
 from eyeexercise.core.settings import (
     BLINK_SECONDS_RANGE,
+    DAILY_GOAL_RANGE,
     DOT_FOLLOW_SECONDS_RANGE,
     IDLE_PAUSE_MINUTES_RANGE,
     IDLE_RESET_MINUTES_RANGE,
@@ -128,6 +129,9 @@ class SettingsPage(QWidget):
                 self._switch("exercises.blink.enabled", "깜빡임 운동", "눈을 천천히 감았다 뜨는 운동이에요."),
                 self._switch("exercises.dot_follow.enabled", "점 따라가기", "화면의 점을 눈으로 따라가는 운동이에요."),
                 self._length_row(),
+                self._slider(
+                    "exercises.daily_goal", "하루 운동 목표", "휴식 알림 때 이 횟수를 채울 때까지 점 따라가기를 권해요. 0이면 권하지 않아요.", DAILY_GOAL_RANGE, "회", 1
+                ),
             ],
         )
         body.addWidget(self._warning)
@@ -340,6 +344,7 @@ class SettingsPage(QWidget):
             self._controls["exercises.blink.duration_seconds"].setEnabled(blink_on)
             self._controls["exercises.dot_follow.duration_seconds"].setEnabled(dot_on)
             self._controls["exercises.dot_follow.speed"].setEnabled(dot_on)
+            self._controls["exercises.daily_goal"].setEnabled(dot_on)
             self._preset.setEnabled(blink_on or dot_on)
             self._warning.setVisible(not blink_on and not dot_on)
             self._preset.setCurrentData(current_preset(settings.exercises))  # 고급에서 따로 정했으면 아무것도 고르지 않은 상태
@@ -360,6 +365,7 @@ class SettingsPage(QWidget):
             "exercises.dot_follow.enabled": ex.dot_follow.enabled,
             "exercises.dot_follow.duration_seconds": ex.dot_follow.duration_seconds,
             "exercises.dot_follow.speed": ex.dot_follow.speed,
+            "exercises.daily_goal": ex.daily_goal,
             "sound.enabled": settings.sound.enabled,
             "show_main_window_on_start": settings.show_main_window_on_start,
             "appearance": settings.appearance,

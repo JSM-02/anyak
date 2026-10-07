@@ -10,8 +10,9 @@ def test_기본값():
     assert s.idle_pause_minutes == 1
     assert s.idle_reset_minutes == 5
     assert s.exercises.blink.enabled is True
-    assert s.exercises.blink.duration_seconds == 66
+    assert s.exercises.blink.duration_seconds == 24
     assert s.exercises.dot_follow.duration_seconds == 60
+    assert s.exercises.daily_goal == 2
     assert s.exercises.dot_follow.speed == "normal"
     assert s.show_main_window_on_start is False
 
@@ -39,7 +40,7 @@ def test_모르는_키는_무시한다():
 def test_누락된_키는_기본값으로_채운다():
     s = settings_from_dict({"exercises": {"blink": {"enabled": False}}})
     assert s.exercises.blink.enabled is False
-    assert s.exercises.blink.duration_seconds == 66
+    assert s.exercises.blink.duration_seconds == 24
     assert s.interval_minutes == 20
 
 
@@ -125,3 +126,19 @@ def test_화면_모드를_저장하고_다시_읽는다():
 @pytest.mark.parametrize("value", ["blue", 1, None, "DARK"])
 def test_알_수_없는_화면_모드는_기본값으로_보정한다(value):
     assert settings_from_dict({"appearance": value}).appearance == "system"
+
+
+# ---- 하루 운동 목표 (7.6a) ----
+
+
+@pytest.mark.parametrize(("value", "expected"), [(0, 0), (5, 5), (3, 3), (-1, 0), (99, 5), ("2", 2), ("x", 2), (None, 2), (True, 2), (2.5, 2)])
+def test_하루_운동_목표는_범위로_보정한다(value, expected):
+    assert settings_from_dict({"exercises": {"daily_goal": value}}).exercises.daily_goal == expected
+
+
+def test_하루_운동_목표를_저장하고_바꾼다():
+    from eyeexercise.core.settings import with_changes
+
+    s = with_changes(Settings(), {"exercises.daily_goal": 4})
+    assert s.exercises.daily_goal == 4
+    assert settings_from_dict(settings_to_dict(s)).exercises.daily_goal == 4

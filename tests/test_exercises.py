@@ -19,10 +19,10 @@ def phase_at(timeline, t):
     return timeline.step_at(t).phase
 
 
-def test_기본값은_한_세트_10회():
+def test_기본값은_휴식용_깜빡임_3회():
     default = Settings().exercises.blink.duration_seconds
     t = blink_timeline(default)
-    assert (default, t.total_seconds, t.cycles) == (66, 66, 10)
+    assert (default, t.total_seconds, t.cycles) == (24, 24, 3)  # 20분마다 하는 휴식이라 짧다
 
 
 def test_사이클은_6초():
@@ -219,3 +219,37 @@ def test_음성_안내는_눈_감고_뜰_때와_먼_곳_보기_때_나온다():
 
 def test_모든_단계에_음성_정의가_있다():
     assert set(SPOKEN) == set(Phase)
+
+
+# ---- 눈 휴식·눈 운동 타임라인 (7.6a) ----
+
+
+def test_휴식은_깜빡임_뒤에_먼_곳_바라보기가_이어진다():
+    from eyeexercise.core.exercises import rest_timeline
+
+    t = rest_timeline(Settings().exercises)
+    assert (t.total_seconds, t.cycles) == (24, 3)
+    assert t.step_at(10).phase is not Phase.LOOK_AWAY
+    assert t.step_at(24 + 0.5).phase is Phase.LOOK_AWAY and t.step_at(24.5).finished
+    assert t.step_at(24 + LOOK_AWAY_SECONDS).done  # 24 + 20초 = 약 44초 뒤에 끝난다
+
+
+def test_깜빡임을_끄면_먼_곳_바라보기만_한다():
+    from eyeexercise.core.exercises import LookAwayTimeline, rest_timeline
+    from eyeexercise.core.settings import with_changes
+
+    t = rest_timeline(with_changes(Settings(), {"exercises.blink.enabled": False}).exercises)
+    assert isinstance(t, LookAwayTimeline) and t.total_seconds == 0
+    first = t.step_at(0)
+    assert first.phase is Phase.LOOK_AWAY and first.countdown == 20 and first.finished and not first.done
+    assert t.step_at(10.5).countdown == 10
+    assert t.step_at(LOOK_AWAY_SECONDS).done
+    assert t.step_at(-3).countdown == 20  # 음수 시간도 안전하다
+
+
+def test_운동은_점_따라가기이고_꺼져_있으면_없다():
+    from eyeexercise.core.exercises import exercise_timeline
+    from eyeexercise.core.settings import with_changes
+
+    assert exercise_timeline(Settings().exercises).total_seconds == 60
+    assert exercise_timeline(with_changes(Settings(), {"exercises.dot_follow.enabled": False}).exercises) is None

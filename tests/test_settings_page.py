@@ -62,7 +62,8 @@ def test_입력칸은_현재_설정_값으로_채워진다(qapp):
     assert page.control("idle_pause_minutes").value() == 1
     assert page.control("idle_reset_minutes").value() == 5
     assert page.control("exercises.blink.enabled").isChecked()
-    assert page.control("exercises.blink.duration_seconds").value() == 10  # 66초 = 깜빡임 10회
+    assert page.control("exercises.blink.duration_seconds").value() == 3  # 24초 = 깜빡임 3회
+    assert page.control("exercises.daily_goal").value() == 2
     assert page.control("exercises.dot_follow.enabled").isChecked()
     assert page.control("exercises.dot_follow.duration_seconds").value() == 6  # 60초 = 10초 단위로 6칸
     assert page.control("exercises.dot_follow.speed").currentData() == "normal"
@@ -254,7 +255,7 @@ def test_키보드로_슬라이더를_움직이면_바로_반영한다(qapp):
 def test_슬라이더_값_표시는_사람이_세는_말이고_바뀐_값을_따라간다(qapp):
     page, _, _ = make_page(qapp)
     blink = page.control("exercises.blink.duration_seconds")
-    assert blink.value_label.text() == "10회"  # 66초가 아니라 10회
+    assert blink.value_label.text() == "3회"  # 24초가 아니라 3회
     blink.setValue(15)
     assert blink.value_label.text() == "15회"
     dot = page.control("exercises.dot_follow.duration_seconds")
@@ -301,7 +302,7 @@ def test_슬라이더에_포커스가_있으면_휠로_값을_바꿀_수_있다(
 def test_깜빡임_설명은_걸리는_시간을_분과_초로_보여_준다(qapp):
     page, _, _ = make_page(qapp)
     hint = page._hints["blink_hint"]
-    assert hint.text() == "준비·마무리 포함 약 1분 6초"
+    assert hint.text() == "준비·마무리 포함 약 24초"
     page.control("exercises.blink.duration_seconds").setValue(4)  # 4회 → 6 + 24 = 30초
     assert "약 30초" in hint.text()
 
@@ -397,7 +398,7 @@ def test_저장할_것이_없는_변경은_안내를_바꾸지_않는다(qapp):
 def test_위젯_종류(qapp):
     page, _, _ = make_page(qapp)
     kinds = {
-        LabeledSlider: ["interval_minutes", "snooze_minutes", "idle_pause_minutes", "idle_reset_minutes", "exercises.blink.duration_seconds", "exercises.dot_follow.duration_seconds"],
+        LabeledSlider: ["interval_minutes", "snooze_minutes", "idle_pause_minutes", "idle_reset_minutes", "exercises.blink.duration_seconds", "exercises.dot_follow.duration_seconds", "exercises.daily_goal"],
         Switch: ["exercises.blink.enabled", "exercises.dot_follow.enabled", "sound.enabled", "show_main_window_on_start"],
         Segmented: ["exercises.dot_follow.speed", "appearance"],
     }
@@ -484,25 +485,25 @@ def test_운동_길이는_짧게_보통_길게_중_보통이_선택돼_있다(qa
     buttons = page.preset_control.buttons()
     assert [b.text() for b in buttons] == ["짧게", "보통", "길게"]
     assert [b.isChecked() for b in buttons] == [False, True, False]
-    assert page._hints["preset_hint"].text() == "깜빡임 10회 · 점 따라가기 1분"
+    assert page._hints["preset_hint"].text() == "깜빡임 3회 · 점 따라가기 1분"
 
 
 def test_짧게를_고르면_두_운동의_길이가_함께_줄어든다(qapp):
     page, manager, saved = make_page(qapp)
     page.preset_control.buttons()[0].click()
-    assert manager.settings.exercises.blink.duration_seconds == 36 and manager.settings.exercises.dot_follow.duration_seconds == 30
+    assert manager.settings.exercises.blink.duration_seconds == 18 and manager.settings.exercises.dot_follow.duration_seconds == 30
     assert len(saved) == 1  # 한 번에 저장한다
     assert [b.isChecked() for b in page.preset_control.buttons()] == [True, False, False]
-    assert page._hints["preset_hint"].text() == "깜빡임 5회 · 점 따라가기 30초"
-    assert page.control("exercises.blink.duration_seconds").value() == 5  # 고급 슬라이더도 따라간다
+    assert page._hints["preset_hint"].text() == "깜빡임 2회 · 점 따라가기 30초"
+    assert page.control("exercises.blink.duration_seconds").value() == 2  # 고급 슬라이더도 따라간다
     assert page.control("exercises.dot_follow.duration_seconds").value() == 3
 
 
 def test_길게를_고르면_두_운동의_길이가_함께_늘어난다(qapp):
     page, manager, _ = make_page(qapp)
     page.preset_control.buttons()[2].click()
-    assert manager.settings.exercises.blink.duration_seconds == 96 and manager.settings.exercises.dot_follow.duration_seconds == 90
-    assert page._hints["preset_hint"].text() == "깜빡임 15회 · 점 따라가기 1분 30초"
+    assert manager.settings.exercises.blink.duration_seconds == 36 and manager.settings.exercises.dot_follow.duration_seconds == 90
+    assert page._hints["preset_hint"].text() == "깜빡임 5회 · 점 따라가기 1분 30초"
 
 
 def test_이미_고른_길이를_다시_눌러도_저장하지_않는다(qapp):
@@ -517,7 +518,7 @@ def test_고급_설정에서_길이를_따로_정하면_아무것도_선택되�
     assert [b.isChecked() for b in page.preset_control.buttons()] == [False, False, False]
     assert page._hints["preset_hint"].text() == "고급 설정에서 운동마다 따로 정한 길이를 쓰고 있어요."
     page.preset_control.buttons()[1].click()  # 보통을 고르면 다시 맞춰진다
-    assert manager.settings.exercises.blink.duration_seconds == 66
+    assert manager.settings.exercises.blink.duration_seconds == 24
     assert [b.isChecked() for b in page.preset_control.buttons()] == [False, True, False]
 
 
@@ -542,7 +543,7 @@ def test_한_운동을_꺼도_길이_선택은_두_운동에_저장된다(qapp):
     page, manager, _ = make_page(qapp)
     page.control("exercises.dot_follow.enabled").setChecked(False)
     page.preset_control.buttons()[2].click()
-    assert manager.settings.exercises.blink.duration_seconds == 96 and manager.settings.exercises.dot_follow.duration_seconds == 90
+    assert manager.settings.exercises.blink.duration_seconds == 36 and manager.settings.exercises.dot_follow.duration_seconds == 90
 
 
 def test_설정_파일에_들어_있는_어긋난_값도_화면에_이상하게_나오지_않는다(qapp):
@@ -563,7 +564,7 @@ def test_점_따라가기_시간의_가장_긴_값은_10분이다(qapp):
 
 # ---- 고급 설정은 접혀 있다 ----
 
-BASIC_PATHS = ["interval_minutes", "exercises.blink.enabled", "exercises.dot_follow.enabled", "appearance", "sound.enabled", "show_main_window_on_start"]
+BASIC_PATHS = ["interval_minutes", "exercises.blink.enabled", "exercises.dot_follow.enabled", "exercises.daily_goal", "appearance", "sound.enabled", "show_main_window_on_start"]
 ADVANCED_PATHS = ["snooze_minutes", "idle_pause_minutes", "idle_reset_minutes", "exercises.blink.duration_seconds", "exercises.dot_follow.duration_seconds", "exercises.dot_follow.speed"]
 
 
@@ -633,12 +634,12 @@ def test_기본_화면에는_60초가_넘는_값을_초로만_말하지_않는�
     assert "66" not in " ".join(all_texts(page))
 
 
-def test_고급_설정을_펼쳐도_66초라고_말하지_않는다(qapp):
+def test_고급_설정을_펼쳐도_초로만_말하지_않는다(qapp):
     page, _, _ = make_page(qapp)
     page._advanced_toggle.click()
     texts = " ".join(all_texts(page))
-    assert long_seconds(page) == [] and "66초" not in texts
-    assert "10회" in texts and "1분 6초" in texts  # 대신 횟수와 분·초로 말한다
+    assert long_seconds(page) == []
+    assert "3회" in texts and "24초" in texts  # 횟수와 분·초로 말한다
 
 
 def test_모든_프리셋에서도_60초가_넘는_값을_초로만_말하지_않는다(qapp):

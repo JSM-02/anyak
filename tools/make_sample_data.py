@@ -21,7 +21,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from eyeexercise.core.exercises import EXERCISE_BLINK, EXERCISE_DOT_FOLLOW  # noqa: E402
-from eyeexercise.core.history import EVENT_COMPLETED, EVENT_SKIPPED, EVENT_SNOOZED, HistoryEvent  # noqa: E402
+from eyeexercise.core.history import ACTIVITY_REST, EVENT_COMPLETED, EVENT_SKIPPED, EVENT_SNOOZED, HistoryEvent  # noqa: E402
 from eyeexercise.core.usage import UsageLog  # noqa: E402
 from eyeexercise.storage import json_store, paths  # noqa: E402
 
@@ -82,15 +82,15 @@ def _events(day: date, sessions: list[tuple[int, int]], rng: random.Random, tz, 
             if roll < 0.5:
                 complete(t)
             elif roll < 0.8:
-                events.append(HistoryEvent(at(t), EVENT_SKIPPED))
+                events.append(HistoryEvent(at(t), EVENT_SKIPPED, activity=ACTIVITY_REST))
             else:  # 미루기: 5분 뒤 다시 알림이 와서 대개 한다
-                events.append(HistoryEvent(at(t), EVENT_SNOOZED))
+                events.append(HistoryEvent(at(t), EVENT_SNOOZED, activity=ACTIVITY_REST))
                 t += SNOOZE_MINUTES
                 if t < end - 2:
                     if rng.random() < 0.65:
                         complete(t)
                     else:
-                        events.append(HistoryEvent(at(t), EVENT_SKIPPED))
+                        events.append(HistoryEvent(at(t), EVENT_SKIPPED, activity=ACTIVITY_REST))
             t += REMINDER_MINUTES + rng.uniform(-2, 8)  # 자리를 잠깐 비우면 조금 늦어진다
     return events, last_exercise
 
