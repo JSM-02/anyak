@@ -7,6 +7,7 @@ import sys
 from PySide6.QtCore import QTimer
 from PySide6.QtWidgets import QApplication, QSystemTrayIcon
 
+from eyeexercise import APP_NAME
 from eyeexercise.core.clock import SystemClock
 from eyeexercise.core.exercises import exercise_timeline, rest_timeline
 from eyeexercise.core.history import ACTIVITY_EXERCISE, History
@@ -175,11 +176,11 @@ def _install_sigint_handler(tray_app: TrayApp) -> QTimer:
 
 def run() -> int:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
-    set_app_user_model_id("EyeExercise.EyeExercise")  # 작업 표시줄에 파이썬이 아닌 우리 아이콘이 보이게
+    set_app_user_model_id("Swieom.Swieom")  # 작업 표시줄에 파이썬이 아닌 우리 아이콘이 보이게
     app = QApplication(sys.argv)
     theme.apply_app_font(app)
     theme.follow_system(app)  # Windows의 라이트/다크 설정을 따라가고, 바뀌면 바로 반영한다
-    app.setApplicationName("EyeExercise")
+    app.setApplicationName(APP_NAME)
     app.setQuitOnLastWindowClosed(False)  # 트레이 상주 앱: 창이 없어도 종료하지 않는다
     app.setWindowIcon(app_icon())
 
@@ -196,6 +197,7 @@ def run() -> int:
         log.error("시스템 트레이를 사용할 수 없어 종료합니다.")
         return 1
 
+    paths.migrate_legacy_data()  # 옛 이름(EyeExercise)으로 쌓인 기록이 있으면 새 폴더로 옮긴다
     tray_app = TrayApp(app, _load_settings())
     instance.activated.connect(tray_app.show_main_window)
     tray_app.start()

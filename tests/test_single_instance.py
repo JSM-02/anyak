@@ -20,7 +20,7 @@ def wait_until(condition, timeout_ms: int = 3000) -> bool:
 @pytest.fixture
 def name(qapp):
     # 테스트끼리, 그리고 실제 앱과 이름이 겹치지 않게 매번 새 이름을 쓴다
-    return f"EyeExercise-test-{uuid.uuid4().hex}"
+    return f"Swieom-test-{uuid.uuid4().hex}"
 
 
 def test_첫_인스턴스만_획득에_성공한다(name):

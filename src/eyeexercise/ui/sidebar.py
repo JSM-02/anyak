@@ -11,6 +11,7 @@ from PySide6.QtGui import QColor, QFont, QFontMetrics, QPainter, QPen, QPixmap
 from PySide6.QtSvg import QSvgRenderer
 from PySide6.QtWidgets import QAbstractButton, QButtonGroup, QHBoxLayout, QLabel, QVBoxLayout, QWidget
 
+from eyeexercise import APP_NAME
 from eyeexercise.ui import theme
 from eyeexercise.ui.icons import render_icon
 
@@ -143,7 +144,7 @@ class Sidebar(QWidget):
 
         logo = QLabel()
         logo.setPixmap(QPixmap.fromImage(render_icon(80)).scaled(40, 40, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation))
-        name = QLabel("EyeExercise")
+        name = QLabel(APP_NAME)
         name.setFont(_bold(17))
         name.setStyleSheet("color: #ffffff; background: transparent;")
         header = QHBoxLayout()

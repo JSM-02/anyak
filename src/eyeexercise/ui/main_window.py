@@ -10,6 +10,7 @@ from PySide6.QtCore import QRect, Signal
 from PySide6.QtGui import QCloseEvent, QGuiApplication
 from PySide6.QtWidgets import QHBoxLayout, QMainWindow, QStackedWidget, QWidget
 
+from eyeexercise import APP_NAME
 from eyeexercise.core.clock import SystemClock
 from eyeexercise.core.formatting import timer_pill
 from eyeexercise.core.history import History
@@ -54,7 +55,7 @@ class MainWindow(QMainWindow):
     ) -> None:
         super().__init__()
         self._quitting = False
-        self.setWindowTitle("EyeExercise")
+        self.setWindowTitle(APP_NAME)
         screen = QGuiApplication.primaryScreen()
         size, minimum = fit_to_screen(screen.availableGeometry()) if screen else (WINDOW_SIZE, WINDOW_MIN_SIZE)
         self.resize(*size)

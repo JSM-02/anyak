@@ -4,11 +4,11 @@ from PySide6.QtCore import QObject, Signal
 from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import QMenu, QSystemTrayIcon
 
+from eyeexercise import APP_NAME
 from eyeexercise.core.formatting import format_remaining
 from eyeexercise.core.scheduler import State
 from eyeexercise.ui.controller import Controller
 
-_APP_NAME = "EyeExercise"
 
 
 class TrayIcon(QObject):
@@ -49,7 +49,7 @@ class TrayIcon(QObject):
         self._tray.hide()
 
     def show_message(self, text: str) -> None:
-        self._tray.showMessage(_APP_NAME, text, QSystemTrayIcon.MessageIcon.Information, 4000)
+        self._tray.showMessage(APP_NAME, text, QSystemTrayIcon.MessageIcon.Information, 4000)
 
     def refresh(self) -> None:
         state = self._controller.state
@@ -58,7 +58,7 @@ class TrayIcon(QObject):
         self._act_now.setEnabled(startable)
         self._act_pause.setText("재개" if state is State.PAUSED else "일시정지")
         self._act_pause.setEnabled(state in (State.RUNNING, State.SNOOZED, State.PAUSED))
-        self._tray.setToolTip(f"{_APP_NAME} — {self._status_text(state)}")
+        self._tray.setToolTip(f"{APP_NAME} — {self._status_text(state)}")
 
     def _status_text(self, state: State) -> str:
         if state is State.DUE:

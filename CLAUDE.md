@@ -1,4 +1,4 @@
-# EyeExercise
+# 쉬엄 (코드 이름: EyeExercise)
 
 PC를 사용하는 동안 일정 간격으로 눈 운동을 알려주는 Windows 트레이 상주 앱.
 

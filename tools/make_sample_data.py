@@ -3,7 +3,7 @@
 기록 탭의 하루 타임라인·차트를 눈으로 확인할 때 쓴다. 앱이 켜져 있으면 곧 메모리의 값으로 덮어쓰므로
 **앱을 종료한 뒤** 실행한다.
 
-    .venv\\Scripts\\python tools\\make_sample_data.py                  # %APPDATA%\\EyeExercise 에 쓴다
+    .venv\\Scripts\\python tools\\make_sample_data.py                  # %APPDATA%\\Swieom 에 쓴다
     .venv\\Scripts\\python tools\\make_sample_data.py --target 폴더    # 다른 폴더에 쓴다 (실제 데이터를 건드리지 않음)
 
 - 오늘 기록은 그대로 두고, 오늘 이전 `--days`일(기본 14일)을 새로 만든다. 그 기간에 있던 기존 기록은 교체된다.
@@ -117,7 +117,7 @@ def build(days: int, today: date, tz, seed: int) -> tuple[list[HistoryEvent], Us
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="실제처럼 보이는 샘플 기록을 만든다 (개발용).")
-    parser.add_argument("--target", type=Path, default=None, help="저장할 폴더 (기본: %%APPDATA%%\\EyeExercise)")
+    parser.add_argument("--target", type=Path, default=None, help="저장할 폴더 (기본: %%APPDATA%%\\Swieom)")
     parser.add_argument("--days", type=int, default=14, help="오늘 이전 며칠을 만들지")
     parser.add_argument("--seed", type=int, default=7)
     args = parser.parse_args()

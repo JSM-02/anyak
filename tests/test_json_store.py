@@ -93,6 +93,6 @@ def test_파일의_모르는_키와_누락_키를_처리한다(tmp_path):
 
 def test_기본_경로는_APPDATA_아래(monkeypatch, tmp_path):
     monkeypatch.setenv("APPDATA", str(tmp_path))
-    assert paths.app_data_dir() == tmp_path / "EyeExercise"
-    assert paths.settings_path() == tmp_path / "EyeExercise" / "settings.json"
-    assert paths.history_path() == tmp_path / "EyeExercise" / "history.json"
+    assert paths.app_data_dir() == tmp_path / "Swieom"
+    assert paths.settings_path() == tmp_path / "Swieom" / "settings.json"
+    assert paths.history_path() == tmp_path / "Swieom" / "history.json"

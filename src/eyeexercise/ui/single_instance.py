@@ -22,7 +22,7 @@ _IO_TIMEOUT_MS = 1000
 def default_name() -> str:
     """사용자별로 이름을 나눠 여러 Windows 세션이 서로 막지 않게 한다."""
     user = re.sub(r"[^A-Za-z0-9_]", "_", os.environ.get("USERNAME", "user"))
-    return f"EyeExercise-{user}"
+    return f"Swieom-{user}"
 
 
 class SingleInstance(QObject):
