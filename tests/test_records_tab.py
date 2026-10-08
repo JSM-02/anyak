@@ -12,6 +12,7 @@ from eyeexercise.core.settings import Settings
 from eyeexercise.core.stats import Period
 from eyeexercise.ui.controller import Controller
 from eyeexercise.ui.main_window import MainWindow
+from eyeexercise.ui import theme
 from eyeexercise.ui.records_tab import RECENT_COLLAPSED, RECENT_EXPANDED, BarChart, Mode, RecordsTab
 
 KST = timezone(timedelta(hours=9))
@@ -355,16 +356,10 @@ def test_하루_흐름이_실제로_그려진다(qapp):
     empty = chart.cell_rect(0, 7)
     assert image.pixelColor(int(empty.left()) + 3, int(empty.bottom()) - 3).name() == "#dfebe6"  # 쓰지 않은 시간은 빈 칸
 
-    done_cell = chart.cell_rect(0, 14)  # 눈 운동 1회: 칸 가운데에 숫자 "1"이 그려진다
-    dark = sum(
-        1
-        for x in range(int(done_cell.left()), int(done_cell.right()))
-        for y in range(int(done_cell.top()), int(done_cell.bottom()))
-        if image.pixelColor(x, y).lightness() < 110
-    )
-    assert dark > 5
+    done_lane = chart.lane_rect(0, 14)  # 눈 운동 1회: 칸 아래 운동 줄에 호박색 막대가 켜진다
+    assert image.pixelColor(int(done_lane.center().x()), int(done_lane.center().y())).name() == theme.color("gauge_mid").name()
 
-    rest_cell = chart.cell_rect(0, 16)  # 눈 휴식은 칸에 숫자를 쓰지 않는다 (20분마다라 너무 많아진다)
+    rest_cell = chart.cell_rect(0, 16)  # 눈 휴식은 칸에도 운동 줄에도 표시하지 않는다 (20분마다라 너무 많아진다)
     flat = {image.pixelColor(x, y).name() for x in range(int(rest_cell.left()) + 2, int(rest_cell.right()) - 2) for y in range(int(rest_cell.top()) + 2, int(rest_cell.bottom()) - 2)}
     assert flat == {"#dfebe6"}
     skipped_cell = chart.cell_rect(0, 11)  # 건너뜀·미룸도 칸 귀퉁이에 점을 그리지 않는다 (줄 오른쪽 요약과 마우스 설명으로만)
@@ -672,3 +667,77 @@ def test_스크린_타임_카드는_두_개일_때_내용만큼만_차지한다(
     tab.set_mode(Mode.REST)
     qapp.processEvents()
     assert abs(sum(card.height() for card in tab._highlight_cards) - chart_card.height()) < 40  # 돌아오면 다시 채운다
+
+
+def lane_color(chart, image, hour, row=0):
+    lane = chart.lane_rect(row, hour)
+    return image.pixelColor(int(lane.center().x()), int(lane.center().y())).name()
+
+
+def timeline_tab(qapp, events, usage=None):
+    from eyeexercise.core.usage import UsageLog
+
+    log = usage or UsageLog()
+    tab = RecordsTab(Source(events), now=lambda: NOW, tz=KST, usage_provider=lambda: log)
+    tab.set_period(Period.DAY)
+    tab.resize(1000, 900)
+    tab.show()
+    qapp.processEvents()
+    return tab
+
+
+def test_눈_운동을_한_시간대의_운동_줄에만_호박색_막대가_켜진다(qapp):
+    events = [done(at(10, 7, 9)), done(at(10, 7, 14), "dot_follow", 60)]
+    events += [done(at(10, 7, 15, m), "dot_follow", 60) for m in (5, 20)]  # 15시에 2회
+    tab = timeline_tab(qapp, events)
+    chart = tab._timeline
+    image = chart.grab().toImage()
+    amber = theme.color("gauge_mid").name()
+    assert lane_color(chart, image, 14) == amber and lane_color(chart, image, 15) == amber
+    assert lane_color(chart, image, 9) != amber  # 눈 휴식만 한 시간대에는 막대가 없다
+    assert lane_color(chart, image, 13) != amber
+
+
+def test_운동_막대는_칸_색과_상관없이_같은_색이고_칸_안에는_아무것도_그리지_않는다(qapp):
+    from eyeexercise.core.usage import UsageLog
+
+    log = UsageLog()
+    log.add(at(10, 7, 14, 0), 120)  # 14시는 거의 빈 칸
+    log.add(at(10, 7, 15, 0), 3600)  # 15시는 가장 진한 칸
+    events = [done(at(10, 7, 14, 10), "dot_follow", 60), done(at(10, 7, 15, 10), "dot_follow", 60)]
+    tab = timeline_tab(qapp, events, log)
+    chart = tab._timeline
+    image = chart.grab().toImage()
+    assert lane_color(chart, image, 14) == lane_color(chart, image, 15) == theme.color("gauge_mid").name()
+    for hour in (14, 15):  # 칸 한가운데는 칸 색 그대로다 (점·글자가 없다)
+        c = chart.cell_rect(0, hour)
+        center = image.pixelColor(int(c.center().x()), int(c.center().y()))
+        edge = image.pixelColor(int(c.left()) + 2, int(c.center().y()))
+        assert center.name() == edge.name(), hour
+
+
+def test_운동_줄은_칸_아래에_있고_줄_높이_안에_들어온다(qapp):
+    tab = timeline_tab(qapp, [done(at(10, 7, 14), "dot_follow", 60)])
+    chart = tab._timeline
+    cell, lane = chart.cell_rect(0, 14), chart.lane_rect(0, 14)
+    assert lane.top() > cell.bottom() and lane.left() == cell.left() and lane.width() == cell.width()
+    row_top = chart._HEAD_H
+    assert cell.top() >= row_top and lane.bottom() <= row_top + chart._ROW_H
+    assert abs((cell.top() - row_top) - (row_top + chart._ROW_H - lane.bottom())) < 1.5  # 덩어리가 줄 가운데에 있다
+
+
+def test_점을_찍어도_줄_오른쪽_요약_글자_위치는_그대로다(qapp):
+    """점을 그리는 코드가 줄의 위치 값을 덮어쓰면 오른쪽 요약이 엉뚱한 줄로 밀린다."""
+    events = [done(at(10, 7, 14), "dot_follow", 60)] + [done(at(10, 6, 15), "dot_follow", 60) for _ in range(3)]
+    tab, _ = make_tab(qapp, events)
+    tab.set_period(Period.DAY)
+    tab.resize(1000, 900)
+    tab.show()
+    qapp.processEvents()
+    chart = tab._timeline
+    image = chart.grab().toImage()
+    info_left = chart.width() - chart._INFO_W
+    for row in (0, 1):
+        top = chart._HEAD_H + row * chart._ROW_H
+        lit = [y for y in range(top, top + chart._ROW_H) if any(image.pixelColor(x, y).lightness() < 150 for x in range(info_left, info_left + 120))]
+        assert lit and min(lit) >= top and max(lit) < top + chart._ROW_H, row  # 글자가 그 줄 안에 있다

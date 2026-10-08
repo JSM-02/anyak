@@ -156,18 +156,10 @@ def test_기록이_하나도_없어도_오늘_요약이_보인다(qapp):
     assert texts(tab, "todayLine") == ["어제 기록이 없어요"] * 3
 
 
-# ---- 하루 흐름: 범례와 칸 안의 숫자 ----
+# ---- 하루 흐름: 범례 글자 없이 알 수 있는 그림 ----
 
 
-def test_범례는_칸_색과_눈_운동_숫자의_뜻을_보여_준다(qapp):
+def test_하루_흐름에는_범례_글자가_없다(qapp):
     tab, _ = make_tab(qapp, [rest(at(10, 7, 14))])
-    assert [plain(t) for t in texts(tab, "legendItem")] == ["■ 스크린 타임 · 숫자는 눈 운동 횟수"]
-    assert not tab._legend.isHidden()
-    assert [c.lower() for c in re.findall(r"#[0-9a-fA-F]{6}", " ".join(texts(tab, "legendItem")))] == ["#2a835f"]  # 칸 색은 포인트 색(초록)
-
-
-def test_모든_모드에서_범례가_보인다(qapp):
-    tab, _ = make_tab(qapp, entries=[(10, 7, 9, 600)])
-    for mode in (Mode.SCREEN_TIME, Mode.REST):
-        tab.set_mode(mode)
-        assert not tab._legend.isHidden()
+    assert not hasattr(tab, "_legend") and texts(tab, "legendItem") == []  # 칸 색(진할수록 오래)과 점(운동)은 설명 없이 읽히게 그린다
+    assert tab._section.text() == "하루 흐름" and not tab._more.isHidden()

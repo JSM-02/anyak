@@ -60,6 +60,7 @@ from eyeexercise.core.stats import (
 )
 from eyeexercise.core.usage import UsageLog
 from eyeexercise.ui import theme
+from eyeexercise.ui.page_column import centered_column
 from eyeexercise.ui.gauge import RingGauge
 
 _PERIOD_LABELS = ((Period.DAY, "일"), (Period.WEEK, "주"), (Period.MONTH, "월"))
@@ -289,15 +290,17 @@ def activity_summary(day) -> str:
 class TimelineChart(QWidget):
     """하루 흐름. 날짜마다 한 줄, 시간대(1시간)마다 한 칸인 격자다.
 
-    칸의 초록이 진할수록 그 시간대에 스크린 타임이 길고, 칸 안의 숫자는 그 시간대에 마친 눈 운동 횟수다.
+    칸의 초록이 진할수록 그 시간대에 스크린 타임이 길고, 칸 아래의 호박색 막대는 그 시간대에 눈 운동을 했다는 표시(눈 운동 줄)다.
     눈 휴식은 20분마다라 칸에 쓰면 너무 많아지므로 줄 오른쪽 요약에만 센다. 칸에 마우스를 올리면 자세한 내용이 뜬다.
     """
 
     _LABEL_W = 92  # 왼쪽 날짜 칸
     _INFO_W = 220  # 오른쪽 요약 칸
     _HEAD_H = 24  # 위쪽 시간 글자
-    _ROW_H = 36
-    _CELL_H = 26
+    _ROW_H = 46
+    _CELL_H = 20  # 스크린 타임 칸
+    _LANE_H = 8  # 칸 아래의 눈 운동 줄
+    _LANE_GAP = 4  # 칸과 운동 줄 사이
     _GAP = 14  # 칸 사이 간격
     _CELL_GAP = 2  # 격자 칸 사이 틈
     _DEFAULT_START = 6  # 가로축은 보통 6시부터 자정까지. 더 이른 기록이 있으면 그 시각부터
@@ -338,12 +341,21 @@ class TimelineChart(QWidget):
         right = self.width() - self._INFO_W - self._GAP
         return QRectF(left, self._HEAD_H, max(1.0, right - left), self._ROW_H * max(1, len(self._days)))
 
+    def _block_offset(self) -> float:
+        """한 줄 안에서 (스크린 타임 칸 + 눈 운동 줄) 덩어리가 시작하는 높이. 줄 가운데에 놓는다."""
+        return (self._ROW_H - self._CELL_H - self._LANE_GAP - self._LANE_H) / 2
+
+    def lane_rect(self, row: int, hour: int) -> QRectF:
+        """row 줄의 hour시 칸 아래에 있는 눈 운동 줄의 막대 자리."""
+        cell = self.cell_rect(row, hour)
+        return QRectF(cell.left(), cell.bottom() + self._LANE_GAP, cell.width(), self._LANE_H)
+
     def cell_rect(self, row: int, hour: int) -> QRectF:
         """row 줄의 hour시 칸. 축 밖의 시각이면 가장자리 밖으로 나간 칸을 돌려준다."""
         grid = self.grid_rect()
         width = grid.width() / (24 - self._start_hour)
         left = grid.left() + width * (hour - self._start_hour)
-        top = grid.top() + row * self._ROW_H + (self._ROW_H - self._CELL_H) / 2
+        top = grid.top() + row * self._ROW_H + self._block_offset()
         half = self._CELL_GAP / 2
         return QRectF(left + half, top, width - self._CELL_GAP, self._CELL_H)
 
@@ -408,24 +420,21 @@ class TimelineChart(QWidget):
             for hour in range(self._start_hour, 24):
                 rect = self.cell_rect(row, hour)
                 seconds = day.hours[hour]
-                marks = day.hour_marks(hour)
                 painter.setPen(Qt.PenStyle.NoPen)
                 if seconds > 0:
                     fill = theme.color("accent")
-                    strength = min(1.0, seconds / 3600)
-                    fill.setAlpha(int(55 + 200 * strength))
+                    fill.setAlpha(int(55 + 200 * min(1.0, seconds / 3600)))
                 else:
-                    fill, strength = theme.color("chip"), 0.0
+                    fill = theme.color("chip")
                 painter.setBrush(fill)
                 painter.drawRoundedRect(rect, 4, 4)
-                done = day.exercises_in_hour(hour)
-                if done:  # 마친 눈 운동 횟수. 진한 칸에서는 흰 글자가 읽힌다
-                    painter.setFont(bold)
-                    painter.setPen(theme.color("on_accent") if strength > 0.55 else theme.color("text"))
-                    painter.drawText(rect, Qt.AlignmentFlag.AlignCenter, str(done))
-                    painter.setFont(small)
+                if day.exercises_in_hour(hour):  # 눈 운동을 마친 시간대는 칸 아래 운동 줄에 호박색 막대를 켠다 (횟수는 줄 오른쪽 글자와 마우스 설명에)
+                    painter.setPen(Qt.PenStyle.NoPen)
+                    painter.setBrush(theme.color("gauge_mid"))
+                    painter.drawRoundedRect(self.lane_rect(row, hour), self._LANE_H / 2, self._LANE_H / 2)
             # 오른쪽 요약
             info = QRectF(self.width() - self._INFO_W, top, self._INFO_W, self._ROW_H)
+            text_top = top + (self._ROW_H - 32) / 2  # 두 줄(16px씩)을 줄 가운데에
             if day.is_empty:
                 painter.setPen(theme.color("text_faint"))
                 painter.drawText(info, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, "기록 없음")
@@ -434,11 +443,11 @@ class TimelineChart(QWidget):
             first = format_usage(day.total_seconds) if has_usage else "스크린 타임 기록 없음"
             painter.setPen(theme.color("text_body") if has_usage else theme.color("text_faint"))
             painter.drawText(
-                QRectF(info.left(), top + 2, info.width(), 16), Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, first
+                QRectF(info.left(), text_top, info.width(), 16), Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, first
             )
             painter.setPen(theme.color("text_muted"))
             painter.drawText(
-                QRectF(info.left(), top + 18, info.width(), 16),
+                QRectF(info.left(), text_top + 16, info.width(), 16),
                 Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
                 activity_summary(day),
             )
@@ -613,17 +622,6 @@ class RecordsTab(QWidget):
         # 하루 타임라인 (운동·스크린 타임 두 모드 공통)
         self._section = QLabel()
         self._section.setObjectName("sectionTitle")
-        self._legend = QWidget()
-        self._legend_items: list[QLabel] = []
-        legend_layout = QHBoxLayout(self._legend)
-        legend_layout.setContentsMargins(8, 0, 0, 0)
-        legend_layout.setSpacing(0)
-        for html in self._legend_html():
-            item = QLabel(html)
-            item.setObjectName("legendItem")
-            item.setTextFormat(Qt.TextFormat.RichText)
-            legend_layout.addWidget(item)
-            self._legend_items.append(item)
         self._more = QPushButton("더 보기")
         self._more.setObjectName("moreButton")
         self._more.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -667,7 +665,6 @@ class RecordsTab(QWidget):
         body.addSpacing(6)
         section_row = QHBoxLayout()
         section_row.addWidget(self._section)
-        section_row.addWidget(self._legend)
         section_row.addStretch()
         section_row.addWidget(self._more)
         body.addLayout(section_row)
@@ -677,7 +674,7 @@ class RecordsTab(QWidget):
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(QFrame.Shape.NoFrame)
-        scroll.setWidget(content)
+        scroll.setWidget(centered_column(content))
         outer = QVBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
         outer.addWidget(scroll)
@@ -688,12 +685,6 @@ class RecordsTab(QWidget):
         self._live.timeout.connect(self._on_live_tick)
 
         self.refresh()
-
-    @staticmethod
-    def _legend_html() -> list[str]:
-        """하루 흐름 범례 한 줄: 칸 색은 스크린 타임, 칸 안의 숫자는 눈 운동 횟수. 휴식은 줄 오른쪽에 적혀 있다."""
-        accent = theme.palette().accent
-        return [f'<span style="color:{accent};">■</span> 스크린 타임 · 숫자는 눈 운동 횟수']
 
     # ---- 상태 ----
 
@@ -842,11 +833,8 @@ class RecordsTab(QWidget):
     def _draw_timeline(self, events, usage: UsageLog, now) -> None:
         """눈 휴식·스크린 타임 두 화면이 같은 하루 타임라인을 보여 준다."""
         self._section.setText("하루 흐름")
-        for item, html in zip(self._legend_items, self._legend_html(), strict=True):
-            item.setText(html)  # 테마가 바뀌면 색도 따라간다
         self._more.setVisible(True)
         self._more.setText("접기" if self._expanded else "더 보기")
-        self._legend.setVisible(True)
         self._timeline.set_days(timeline_days(events, usage, now, RECENT_EXPANDED if self._expanded else RECENT_COLLAPSED, self._tz))
 
     def _draw_screen_time(self, rest_buckets, usage: UsageLog, now, today, previous_anchor, label, all_events, rest_events) -> None:

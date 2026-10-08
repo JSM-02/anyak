@@ -67,7 +67,7 @@ class NavButton(QAbstractButton):
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         rect = QRectF(self.rect())
         if self.isChecked():
-            background, foreground = theme.color("accent"), QColor("#ffffff")
+            background, foreground = theme.color("accent"), theme.color("on_accent")
         elif self.underMouse():
             background, foreground = QColor(255, 255, 255, 22), QColor("#ffffff")
         else:

@@ -149,3 +149,36 @@ def test_한_번도_보이지_않은_창도_다크_모드로_바뀐_뒤_처음_�
     assert QColor(exercise.grab().toImage().pixel(40, 300)).name() == theme.DARK.bg
     popup.hide()
     exercise.hide()
+
+
+# ---- 9e: 다크 모드에서 채운 바탕 위 글자 ----
+
+
+def test_채운_바탕_위_글자는_두_테마_모두_읽힌다():
+    for p in (theme.LIGHT, theme.DARK):
+        assert contrast(p.ink, p.sand) >= 7  # 홈 [지금 휴식]·팝업 [시작] (모래색 위 짙은 글자)
+        assert contrast("#ffffff", p.hero) >= 4.5  # 짙은 초록 블록 위 흰 글자 (팝업·홈 타이머·오늘 눈 휴식 카드)
+        assert contrast(p.sand, p.hero) >= 4.5  # 블록 위 모래색 글자
+        assert contrast(p.sidebar_text, p.hero) >= 4.5  # 블록 위 연한 초록 보조 글자
+        assert contrast(p.on_accent, p.accent) >= 4.5  # 사이드바 선택 메뉴·저장 버튼 (포인트 초록 위 글자)
+        assert contrast("#ffffff", p.sidebar) >= 7 and contrast(p.sidebar_text, p.sidebar) >= 4.5
+        assert contrast("#ffffff", p.sidebar_pill) >= 4.5  # 사이드바 타이머 알약
+
+
+def test_다크_모드의_고정색_글자는_테마_글자색이_아니라_ink다():
+    """모래색·초록처럼 두 테마에서 밝기가 같은 바탕 위에 `$text`를 쓰면 다크 모드에서 글자가 사라진다."""
+    import re
+
+    from eyeexercise.ui import exercise_window, home_page, records_tab, reminder_popup, settings_page, vision_page
+
+    for module in (exercise_window, home_page, records_tab, reminder_popup, settings_page, vision_page):
+        for rule in re.findall(r"[^{}]*\{[^}]*\}", module._STYLE):
+            body = rule.split("{", 1)[1]
+            if re.search(r"background:\s*\$(sand|hero)\b", body):
+                assert not re.search(r"(?<![-\w])color:\s*\$text\b", body), (module.__name__, rule.strip())
+
+
+def test_다크_팔레트는_초록_기운이_있는_어두운_색이다():
+    for name in ("bg", "surface", "sidebar", "chip", "border"):
+        c = QColor(getattr(theme.DARK, name))
+        assert c.green() >= c.red() and c.lightness() < 70, name  # 회색이 아니라 초록 쪽으로 치우친 어두운 색

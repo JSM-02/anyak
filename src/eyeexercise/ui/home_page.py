@@ -19,6 +19,7 @@ from eyeexercise.core.settings import Settings
 from eyeexercise.core.stats import format_usage, timeline_days
 from eyeexercise.core.usage import UsageLog
 from eyeexercise.ui import theme
+from eyeexercise.ui.page_column import centered_column
 from eyeexercise.ui.gauge import RingGauge
 from eyeexercise.ui.records_tab import TimelineChart
 
@@ -32,9 +33,9 @@ _STYLE = """
 #heroKicker { font-size: $fs_heading; font-weight: 800; color: $sand; }
 #heroClock { font-size: 64px; font-weight: 900; color: #ffffff; }
 #heroSub { font-size: $fs_small; color: $sidebar_text; font-weight: 700; }
-#heroRest { background: $sand; color: $text; border: none; border-radius: 14px; padding: 11px 24px; font-size: $fs_body; font-weight: 800; }
+#heroRest { background: $sand; color: $ink; border: none; border-radius: 14px; padding: 11px 24px; font-size: $fs_body; font-weight: 800; }
 #heroRest:hover { background: #ffffff; }
-#heroRest:disabled { background: $accent_disabled; color: $hero; }
+#heroRest:disabled { background: rgba(242, 227, 179, 70); color: rgba(255, 255, 255, 140); }
 #heroSnooze { background: rgba(255, 255, 255, 36); color: #ffffff; border: none; border-radius: 14px; padding: 11px 22px; font-size: $fs_body; font-weight: 800; }
 #heroSnooze:hover { background: rgba(255, 255, 255, 70); }
 #heroSnooze:disabled { background: rgba(255, 255, 255, 14); color: $text_faint; }
@@ -221,7 +222,7 @@ class HomePage(QWidget):
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(QFrame.Shape.NoFrame)
-        scroll.setWidget(content)
+        scroll.setWidget(centered_column(content))
         outer = QVBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
         outer.addWidget(scroll)

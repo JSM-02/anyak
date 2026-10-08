@@ -22,7 +22,7 @@ _STYLE = """
     border-radius: 12px; padding: 9px 14px; font-weight: 700;
 }
 #popup QPushButton:hover { background: rgba(255, 255, 255, 70); }
-#popup QPushButton#primary { color: $text; background: $sand; font-weight: 800; }
+#popup QPushButton#primary { color: $ink; background: $sand; font-weight: 800; }
 #popup QPushButton#primary:hover { background: #ffffff; }
 #popup QPushButton#offer { color: $sand; background: transparent; border: 1px solid $sand; font-weight: 800; }
 #popup QPushButton#offer:hover { background: rgba(242, 227, 179, 40); }

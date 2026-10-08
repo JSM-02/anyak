@@ -31,6 +31,7 @@ from eyeexercise.core.vision import (
     trend_deltas,
 )
 from eyeexercise.ui import theme
+from eyeexercise.ui.page_column import centered_column
 from eyeexercise.ui.controls import CONTROLS_STYLE, Segmented
 
 SAVE_FAILED_MESSAGE = "파일에 저장하지 못했어요. 입력한 내용은 그대로 두었으니 잠시 후 다시 눌러 주세요."
@@ -192,7 +193,7 @@ class VisionPage(QWidget):
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(QFrame.Shape.NoFrame)
-        scroll.setWidget(content)
+        scroll.setWidget(centered_column(content))
         outer = QVBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
         outer.addWidget(scroll)

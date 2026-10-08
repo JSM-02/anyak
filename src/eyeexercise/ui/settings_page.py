@@ -37,6 +37,7 @@ from eyeexercise.core.settings import (
 from eyeexercise.core.settings_manager import SettingsManager
 from eyeexercise.core.stats import format_duration
 from eyeexercise.ui import theme
+from eyeexercise.ui.page_column import centered_column
 from eyeexercise.ui.controls import CONTROLS_STYLE, LabeledSlider, Segmented, Switch
 
 APPEARANCE_LABELS = {"system": "시스템 설정", "light": "라이트", "dark": "다크"}
@@ -249,7 +250,7 @@ class SettingsPage(QWidget):
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(QFrame.Shape.NoFrame)
-        scroll.setWidget(content)
+        scroll.setWidget(centered_column(content))
         outer = QVBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
         outer.addWidget(scroll)

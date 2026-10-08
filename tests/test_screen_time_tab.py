@@ -229,7 +229,7 @@ def test_스크린_타임에서도_하루_흐름에_시간대별_사용이_보�
     assert [d.title for d in days][:3] == ["오늘", "어제", "10월 5일 (월)"] and len(days) == 7
     assert days[0].hours[9] == 3600 and days[0].hours[10] == 1800
     assert days[0].total_seconds == 5400
-    assert not tab._more.isHidden() and not tab._legend.isHidden()
+    assert not tab._more.isHidden()
 
 
 def test_하루_흐름의_마우스_설명에_사용_시간이_나온다(qapp):
