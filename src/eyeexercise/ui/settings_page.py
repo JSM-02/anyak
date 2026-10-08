@@ -13,6 +13,7 @@ from typing import Any
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QLayout, QPushButton, QScrollArea, QVBoxLayout, QWidget
 
+from eyeexercise.core.autostart import AutoStart
 from eyeexercise.core.exercises import (
     LENGTH_PRESETS,
     blink_cycles_for_seconds,
@@ -43,6 +44,8 @@ from eyeexercise.ui.controls import CONTROLS_STYLE, LabeledSlider, Segmented, Sw
 APPEARANCE_LABELS = {"system": "시스템 설정", "light": "라이트", "dark": "다크"}
 SPEED_LABELS = {"slow": "느리게", "normal": "보통", "fast": "빠르게"}
 SAVE_FAILED_MESSAGE = "설정을 파일에 저장하지 못했어요. 이번 실행에서만 적용돼요."
+AUTOSTART_FAILED_MESSAGE = "자동 실행 설정을 바꾸지 못했어요. 이 계정에서 레지스트리에 쓸 수 없는 상태일 수 있어요."
+AUTOSTART_UNAVAILABLE_HINT = "설치한 쉬엄(exe)으로 실행할 때만 쓸 수 있어요."
 EXERCISE_OFF_MESSAGE = "점 따라가기를 끄면 눈 운동을 권하지 않아요."
 CUSTOM_LENGTH_MESSAGE = "고급 설정에서 운동마다 따로 정한 길이를 쓰고 있어요."
 RESET_TEXT = "설정 초기화"
@@ -89,9 +92,11 @@ def _card(rows: list[QWidget]) -> QFrame:
 
 
 class SettingsPage(QWidget):
-    def __init__(self, manager: SettingsManager, parent: QWidget | None = None) -> None:
+    def __init__(self, manager: SettingsManager, parent: QWidget | None = None, autostart: AutoStart | None = None) -> None:
         super().__init__(parent)
         self._manager = manager
+        self._autostart = autostart  # 켜져 있는지는 설정 파일이 아니라 Windows(레지스트리)가 기억한다
+        self._autostart_switch: Switch | None = None
         self._loading = False  # 값을 채우는 중에는 바뀐 값으로 보고하지 않는다
         self._controls: dict[str, QWidget] = {}
         self._to_ui: dict[str, Callable[[int], int]] = {}  # 설정 값 → 화면 값 (예: 초 → 회)
@@ -155,6 +160,7 @@ class SettingsPage(QWidget):
             [
                 self._switch("sound.enabled", "소리 안내", "운동 중 효과음으로 단계를 알려 주고, 알림이 뜰 때 부드러운 소리가 나요."),
                 self._switch("show_main_window_on_start", "시작할 때 창 보이기", "끄면 트레이에서만 조용히 시작해요."),
+                self._autostart_row(),
             ],
         )
 
@@ -315,6 +321,35 @@ class SettingsPage(QWidget):
         self._controls[path] = switch
         return self._row(title, hint, switch)
 
+    def _autostart_row(self) -> QWidget:
+        """Windows를 켤 때 같이 실행. 설정 파일이 아니라 자동 실행 객체(레지스트리)에 바로 반영한다."""
+        switch = Switch()
+        title = "Windows를 켤 때 같이 실행"
+        switch.setAccessibleName(title)
+        switch.toggled.connect(self._on_autostart_toggled)
+        self._autostart_switch = switch
+        available = self._autostart is not None and self._autostart.is_available()
+        hint = "켜면 PC를 켤 때 쉬엄이 자동으로 시작돼요. 지우기 전에는 꺼 주세요." if available else AUTOSTART_UNAVAILABLE_HINT
+        switch.setEnabled(available)
+        return self._row(title, hint, switch)
+
+    def _on_autostart_toggled(self, checked: bool) -> None:
+        if self._loading or self._autostart is None:
+            return
+        if self._autostart.set_enabled(checked):
+            return
+        # 실패하면 실제 등록 상태로 되돌리고 알린다
+        self._set_autostart_checked(self._autostart.is_enabled())
+        self._status.setText(AUTOSTART_FAILED_MESSAGE)
+        self._status.setVisible(True)
+
+    def _set_autostart_checked(self, checked: bool) -> None:
+        self._loading = True  # 되돌리는 동작이 다시 등록을 부르지 않게
+        try:
+            self._autostart_switch.setChecked(checked)
+        finally:
+            self._loading = False
+
     def _segmented(self, path: str, title: str, hint: str) -> QWidget:
         segmented = Segmented([(SPEED_LABELS[speed], speed) for speed in SPEEDS])
         segmented.changed.connect(lambda value, p=path: self._changed({p: value}))
@@ -388,6 +423,8 @@ class SettingsPage(QWidget):
             self._controls["exercises.dot_follow.speed"].setEnabled(dot_on)
             self._controls["exercises.daily_goal"].setEnabled(dot_on)
             self._warning.setVisible(not dot_on)
+            if self._autostart is not None and self._autostart.is_available():
+                self._autostart_switch.setChecked(self._autostart.is_enabled())
             self._preset.setCurrentData(current_preset(settings.exercises))  # 고급에서 따로 정했으면 아무것도 고르지 않은 상태
             self._update_hints(settings)
         finally:
@@ -433,6 +470,10 @@ class SettingsPage(QWidget):
     def control(self, path: str) -> QWidget:
         """경로(예: "interval_minutes")에 해당하는 컨트롤. 테스트와 다른 화면에서 쓴다."""
         return self._controls[path]
+
+    @property
+    def autostart_switch(self) -> Switch:
+        return self._autostart_switch
 
     @property
     def preset_control(self) -> Segmented:

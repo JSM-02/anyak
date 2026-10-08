@@ -11,6 +11,7 @@ from PySide6.QtGui import QCloseEvent, QGuiApplication
 from PySide6.QtWidgets import QHBoxLayout, QMainWindow, QStackedWidget, QWidget
 
 from eyeexercise import APP_NAME
+from eyeexercise.core.autostart import AutoStart
 from eyeexercise.core.clock import SystemClock
 from eyeexercise.core.formatting import timer_pill
 from eyeexercise.core.history import History
@@ -52,6 +53,7 @@ class MainWindow(QMainWindow):
         usage: UsageLog | None = None,
         settings_manager: SettingsManager | None = None,
         vision_log: VisionLog | None = None,
+        autostart: AutoStart | None = None,
     ) -> None:
         super().__init__()
         self._quitting = False
@@ -75,7 +77,7 @@ class MainWindow(QMainWindow):
             usage_provider=lambda: usage or UsageLog(),
             interval_minutes=lambda: manager.settings.interval_minutes,
         )
-        self.settings_page = SettingsPage(manager)
+        self.settings_page = SettingsPage(manager, autostart=autostart)
         self.vision_page = VisionPage(vision_log, today=lambda: now().date())
         self._stack = QStackedWidget()
         for page in (self.home_page, self.records_tab, self.vision_page, self.settings_page):  # _MENU와 같은 순서

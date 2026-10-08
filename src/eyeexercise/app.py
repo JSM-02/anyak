@@ -11,6 +11,7 @@ from eyeexercise import APP_NAME
 from eyeexercise.core.clock import SystemClock
 from eyeexercise.core.exercises import exercise_timeline, rest_timeline
 from eyeexercise.core.history import ACTIVITY_EXERCISE, History
+from eyeexercise.core.autostart import AutoStart
 from eyeexercise.core.offer import exercises_done_today, should_offer_exercise
 from eyeexercise.core.scheduler import ReminderScheduler, State
 from eyeexercise.core.settings import Settings
@@ -18,6 +19,7 @@ from eyeexercise.core.settings_manager import SettingsManager
 from eyeexercise.core.usage import UsageTracker
 from eyeexercise.core.vision import VisionLog
 from eyeexercise.platform.win_idle import WinIdleSource
+from eyeexercise.platform.win_startup import WinAutoStart
 from eyeexercise.platform.win_window import allow_any_process_to_set_foreground, set_app_user_model_id
 from eyeexercise.storage import json_store, paths
 from eyeexercise.ui import theme
@@ -34,7 +36,7 @@ log = logging.getLogger(__name__)
 
 
 class TrayApp:
-    def __init__(self, app: QApplication, settings: Settings) -> None:
+    def __init__(self, app: QApplication, settings: Settings, autostart: AutoStart | None = None) -> None:
         self._app = app
         self._settings = settings
         theme.set_mode(settings.appearance)  # 창을 만들기 전에 정해야 처음부터 맞는 색으로 뜬다
@@ -69,8 +71,14 @@ class TrayApp:
             json_store.load_vision(vision_file),
             save=lambda records: json_store.save_vision(vision_file, records),
         )
+        autostart = autostart or WinAutoStart()
+        autostart.refresh()  # 켜져 있다면 폴더를 옮겼어도 지금 경로로 맞춘다
         self.main_window = MainWindow(
-            self.history, usage=self.usage, settings_manager=self.settings_manager, vision_log=self.vision_log
+            self.history,
+            usage=self.usage,
+            settings_manager=self.settings_manager,
+            vision_log=self.vision_log,
+            autostart=autostart,
         )
         self.main_window.attach_controller(self.controller)  # 사이드바의 눈 휴식 타이머
         self.tray = TrayIcon(self.controller, app_icon())
