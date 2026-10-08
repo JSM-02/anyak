@@ -58,11 +58,15 @@ FORBIDDEN_MODULES = {
     # 외부 프로그램 실행·동적 import (위 금지 목록을 우회하는 길을 막는다)
     "subprocess": "외부 프로그램을 실행하지 않는다",
     "importlib": "동적 import로 이 검사를 피하지 않는다",
+    # 레지스트리: 자동 실행 등록(현재 사용자 Run 키)만 한 곳에서 한다
+    "winreg": "레지스트리는 platform/win_startup.py에서만 쓴다",
+    "_winreg": "레지스트리는 platform/win_startup.py에서만 쓴다",
 }
 
 # 경로(ROOT 기준) → 그 파일에서만 허용하는 금지 모듈
 ALLOWED_EXCEPTIONS = {
     "src/eyeexercise/ui/single_instance.py": {"PySide6.QtNetwork"},
+    "src/eyeexercise/platform/win_startup.py": {"winreg"},
 }
 
 # 코드에 이름으로 나오면 안 되는 Win32 함수·호출 (키 입력·창 제목·프로그램 이름 수집용)
@@ -167,6 +171,8 @@ def test_허용_예외는_실제로_쓰이는_파일에만_둔다():
         "import psutil",
         "import subprocess",
         "import importlib",
+        "import winreg",
+        "from winreg import SetValueEx",
         "import ctypes\nctypes.windll.user32.SetWindowsHookExW(0, 0, 0, 0)",
         "import ctypes\nctypes.windll.user32.GetAsyncKeyState(0x41)",
         "import ctypes\nctypes.windll.user32.GetForegroundWindow()",
@@ -191,6 +197,12 @@ def test_검사기는_금지된_코드를_잡는다(source):
 )
 def test_검사기는_허용된_코드를_통과시킨다(source):
     assert not find_violations(source, "src/eyeexercise/x.py")
+
+
+def test_자동_실행_파일만_winreg를_쓸_수_있다():
+    source = "import winreg"
+    assert not find_violations(source, "src/eyeexercise/platform/win_startup.py")
+    assert find_violations(source, "src/eyeexercise/platform/win_idle.py")
 
 
 def test_단일_인스턴스만_QtNetwork를_쓸_수_있다():
