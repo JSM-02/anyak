@@ -31,6 +31,7 @@ PHASE_FILES = {
 }
 # 이 단계들의 소리는 다른 단계의 파일 안에 이미 들어 있다. (뜨기 종소리는 사이클 파일에 있다.)
 COVERED_BY = {Phase.HOLD: Phase.CLOSE, Phase.OPEN: Phase.CLOSE, Phase.REST: Phase.CLOSE}
+ALERT_FILE = "alert"  # 알림 팝업이 뜰 때 나는 소리 (assets/sounds/alert.wav)
 POOL_SIZE = 2  # 겹쳐 재생하려고 파일마다 재생기를 둘씩 두고 번갈아 쓴다
 
 # 음성이 없을 때 쓰는 알림음 높이(Hz). 감을 때는 낮게, 뜰 때는 높게 해서 구분한다.
@@ -194,6 +195,46 @@ def _korean_tts():
     except Exception:  # 엔진 초기화 실패는 어떤 종류든 소리 없이 쓰는 것보다 알림음으로 대신하는 게 낫다
         log.warning("음성 엔진을 초기화하지 못했습니다.", exc_info=True)
     return None
+
+
+class AlertSound:
+    """알림 팝업이 뜰 때 한 번 울리는 부드러운 알림음(`assets/sounds/alert.wav`).
+
+    파일이 없거나 재생할 수 없으면 Windows 기본 알림음으로 대신한다.
+    """
+
+    def __init__(self, sounds_dir: Path, effect_factory: Callable[[Path], object] = _make_effect) -> None:
+        self._effect = None
+        path = sounds_dir / f"{ALERT_FILE}.wav"
+        if path.is_file():
+            try:
+                self._effect = effect_factory(path)
+            except Exception:  # 파일이 문제여도 기본 알림음으로 알린다
+                log.warning("알림음 파일을 불러오지 못했습니다: %s", path, exc_info=True)
+
+    def play(self) -> None:
+        if self._effect is not None and not _failed(self._effect):
+            self._effect.play()
+            return
+        threading.Thread(target=self._system_beep, daemon=True).start()
+
+    def stop(self) -> None:
+        if self._effect is not None:
+            self._effect.stop()
+
+    @staticmethod
+    def _system_beep() -> None:
+        try:
+            import winsound
+
+            winsound.MessageBeep()
+        except (ImportError, RuntimeError):
+            pass  # 소리를 낼 수 없는 환경이면 조용히 넘어간다
+
+
+def create_alert(enabled: bool, sounds_dir: Path = SOUNDS_DIR) -> AlertSound | None:
+    """설정에 따라 알림음을 만든다. 소리가 꺼져 있으면 None."""
+    return AlertSound(sounds_dir) if enabled else None
 
 
 def create_speaker(enabled: bool, sounds_dir: Path = SOUNDS_DIR) -> Speaker | None:

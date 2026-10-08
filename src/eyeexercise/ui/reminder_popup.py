@@ -13,20 +13,19 @@ _FADE_MS = 180
 _ICON_PX = 36
 
 _STYLE = """
-#popup { background: $surface; border: 1px solid $border_strong; border-radius: 8px; }
-#popup QLabel { color: $text; }
-#title { font-size: $fs_heading; font-weight: bold; }
-#message { color: $text_secondary; }
-#popup QLabel#icon { background: transparent; }
+#popup { background: $hero; border: 1px solid $sidebar; border-radius: 18px; }
+#popup QLabel { color: #ffffff; background: transparent; }
+#title { font-size: $fs_heading; font-weight: 900; }
+#message { color: $sidebar_text; font-weight: 600; }
 #popup QPushButton {
-    color: $text; background: $chip; border: 1px solid $border_strong;
-    border-radius: 4px; padding: 6px 12px;
+    color: #ffffff; background: rgba(255, 255, 255, 36); border: none;
+    border-radius: 12px; padding: 9px 14px; font-weight: 700;
 }
-#popup QPushButton:hover { background: $hover; }
-#popup QPushButton#primary { color: $on_accent; background: $accent; border: 1px solid $accent; }
-#popup QPushButton#offer { color: $text; background: $accent_soft; border: 1px solid $accent; font-weight: bold; }
-#popup QPushButton#offer:hover { background: $hover; }
-#popup QPushButton#primary:hover { background: $accent_hover; border: 1px solid $accent_hover; }
+#popup QPushButton:hover { background: rgba(255, 255, 255, 70); }
+#popup QPushButton#primary { color: $text; background: $sand; font-weight: 800; }
+#popup QPushButton#primary:hover { background: #ffffff; }
+#popup QPushButton#offer { color: $sand; background: transparent; border: 1px solid $sand; font-weight: 800; }
+#popup QPushButton#offer:hover { background: rgba(242, 227, 179, 40); }
 """
 
 
@@ -35,6 +34,8 @@ class ReminderPopup(QWidget):
     snooze_clicked = Signal()
     skip_clicked = Signal()
     exercise_clicked = Signal()  # '운동도 할래요?'
+
+    _alert = None  # 팝업이 뜰 때 울리는 알림음. 소리를 끄면 None
 
     def __init__(self, snooze_minutes: int) -> None:
         super().__init__(
@@ -86,8 +87,8 @@ class ReminderPopup(QWidget):
         header.addLayout(texts, stretch=1)
 
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(16, 14, 16, 14)
-        layout.setSpacing(12)
+        layout.setContentsMargins(20, 18, 20, 18)
+        layout.setSpacing(14)
         layout.addLayout(header)
         layout.addLayout(buttons)
         layout.addWidget(self._exercise_button)
@@ -112,6 +113,10 @@ class ReminderPopup(QWidget):
         self._exercise_button.setText(f"운동도 할래요? (오늘 {done}/{goal})")
         self._exercise_button.show()
 
+    def set_alert(self, alert) -> None:
+        """팝업이 뜰 때 울릴 알림음(`play()`가 있는 것)을 정한다. None이면 조용히 뜬다."""
+        self._alert = alert
+
     def set_snooze_minutes(self, minutes: int) -> None:
         """설정에서 미루기 시간을 바꾸면 버튼 글자도 바꾼다."""
         self._snooze_button.setText(f"{minutes}분 미루기")
@@ -128,6 +133,8 @@ class ReminderPopup(QWidget):
         self._slide.setEndValue(target)
         self.show()
         self._appear.start()
+        if self._alert is not None:
+            self._alert.play()
 
     def hideEvent(self, event) -> None:
         self._appear.stop()  # 나타나는 도중에 닫혀도 다음에 깨끗하게 시작한다

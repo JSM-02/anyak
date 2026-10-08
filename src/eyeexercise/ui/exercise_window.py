@@ -35,18 +35,17 @@ def window_size(exercise: str, area: QRect) -> tuple[int, int]:
 _FRAME_MS = 16  # 약 60fps. 정밀 타이머를 함께 써야 Windows에서 간격이 고르다 (거친 타이머는 33ms가 실제 약 21fps)
 
 _STYLE = """
-#exercise { background: $surface; border: 1px solid $border_strong; border-radius: 10px; }
-#exercise QLabel { color: $text; }
-#message { font-size: $fs_title; font-weight: bold; }
-#tag { background: $chip; color: $text_body; border-radius: 10px; padding: 4px 12px; font-size: $fs_caption; font-weight: bold; }
+#exercise { background: $bg; border: 1px solid $border_strong; border-radius: 18px; }
+#exercise QLabel { color: $text; background: transparent; }
+#message { font-size: $fs_title; font-weight: 800; }
+#exercise QLabel#tag { background: $accent_soft; color: $accent_hover; border-radius: 12px; padding: 5px 14px; font-size: $fs_caption; font-weight: 800; }
 #hint { color: $text_secondary; font-size: $fs_caption; }
 #exercise QProgressBar {
-    background: $hover; border: none; border-radius: 4px; max-height: 8px; min-height: 8px;
+    background: $track; border: none; border-radius: 4px; max-height: 8px; min-height: 8px;
 }
 #exercise QProgressBar::chunk { background: $accent; border-radius: 4px; }
 #exercise QPushButton {
-    color: $text; background: $chip; border: 1px solid $border_strong;
-    border-radius: 4px; padding: 6px 16px;
+    color: $text; background: $surface; border: 1px solid $border; border-radius: 12px; padding: 8px 24px; font-weight: 700;
 }
 #exercise QPushButton:hover { background: $hover; }
 """
@@ -116,7 +115,8 @@ class EyeWidget(QWidget):
         center = self.iris_center()
         eye = self.lid_path()
 
-        outline = QPen(theme.color("accent"), 5)
+        line = theme.color("accent")  # 윤곽선과 홍채는 포인트 초록, 눈 안쪽은 카드 바탕색
+        outline = QPen(line, 5)
         outline.setCapStyle(Qt.PenCapStyle.RoundCap)
         outline.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
         painter.setPen(outline)
@@ -126,7 +126,7 @@ class EyeWidget(QWidget):
         if e > 0.12:  # 거의 감겼을 때는 홍채를 그리지 않는다
             painter.setClipPath(eye)
             painter.setPen(Qt.PenStyle.NoPen)
-            painter.setBrush(theme.color("accent"))
+            painter.setBrush(line)
             painter.drawEllipse(center, self._IRIS_R, self._IRIS_R)
             painter.setBrush(QColor("#202124"))  # 동공은 어느 테마에서나 어둡게
             painter.drawEllipse(center, self._PUPIL_R, self._PUPIL_R)
@@ -165,17 +165,17 @@ class DotCanvas(QWidget):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         painter.setPen(Qt.PenStyle.NoPen)
-        painter.setBrush(theme.color("chip"))  # 점이 움직이는 영역을 은은하게 보여 준다
+        painter.setBrush(theme.color("hover"))  # 점이 움직이는 영역을 은은하게 보여 준다
         painter.drawRoundedRect(self.rect(), 10, 10)
         pos = self.dot_position()
         if pos is not None:
             glow = theme.color("accent")
-            glow.setAlpha(50)
+            glow.setAlpha(55)
             painter.setBrush(glow)
             painter.drawEllipse(pos, 20, 20)  # 은은한 번짐
             painter.setBrush(theme.color("accent"))
             painter.drawEllipse(pos, 11, 11)
-            painter.setBrush(theme.color("on_accent"))
+            painter.setBrush(theme.color("surface"))
             painter.drawEllipse(pos, 3, 3)  # 시선을 모을 가운데 점
         painter.end()
 

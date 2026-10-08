@@ -152,7 +152,7 @@ class SettingsPage(QWidget):
             body,
             "소리와 시작",
             [
-                self._switch("sound.enabled", "소리 안내", "운동 중 효과음으로 단계를 알려요. 눈을 감고도 따라 할 수 있어요."),
+                self._switch("sound.enabled", "소리 안내", "운동 중 효과음으로 단계를 알려 주고, 알림이 뜰 때 부드러운 소리가 나요."),
                 self._switch("show_main_window_on_start", "시작할 때 창 보이기", "끄면 트레이에서만 조용히 시작해요."),
             ],
         )

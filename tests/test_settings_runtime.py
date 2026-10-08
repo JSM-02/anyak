@@ -188,3 +188,17 @@ def test_저장에_실패해도_앱은_바뀐_설정으로_동작한다(qapp, tm
     result = tray_app.settings_manager.update({"interval_minutes": 25})
     assert not result.saved
     assert tray_app.controller.remaining_seconds == 25 * 60
+
+
+def test_소리를_켜고_끄면_알림음도_따라간다(qapp, tmp_path, monkeypatch):
+    from eyeexercise import app as app_module
+
+    created = []
+    monkeypatch.setattr(app_module, "create_alert", lambda enabled: created.append(enabled) or (object() if enabled else None))
+    tray_app, _ = make_app(qapp, tmp_path, monkeypatch, sound=False)
+    assert tray_app.popup._alert is None
+    tray_app.settings_manager.update({"sound.enabled": True})
+    assert tray_app.popup._alert is not None
+    tray_app.settings_manager.update({"sound.enabled": False})
+    assert tray_app.popup._alert is None
+    assert created[-2:] == [True, False]

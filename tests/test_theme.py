@@ -70,7 +70,7 @@ def test_테마를_바꾸면_이미_만든_화면의_스타일시트가_바뀐�
     theme.set_dark(True)
     after = [w.styleSheet() for w in (window.vision_page, window.settings_page, window.records_tab, popup, exercise)]
     assert all(b != a for b, a in zip(before, after, strict=True))
-    assert theme.DARK.surface in popup.styleSheet()
+    assert theme.DARK.hero in popup.styleSheet()
     theme.set_dark(False)
     assert popup.styleSheet() == before[3]
 
@@ -132,3 +132,20 @@ def test_포인트_색은_초록이다():
     for p in (theme.LIGHT, theme.DARK):
         c = QColor(p.accent)
         assert c.green() > c.red() + 40 and c.green() > c.blue() + 20, p.accent
+
+
+def test_한_번도_보이지_않은_창도_다크_모드로_바뀐_뒤_처음_뜰_때_어두운_색이다(qapp):
+    from PySide6.QtGui import QColor
+
+    from eyeexercise.ui.exercise_window import ExerciseWindow
+
+    popup = ReminderPopup(5)
+    exercise = ExerciseWindow(None)  # 아직 보인 적 없는 창
+    theme.set_dark(True)
+    popup.show()
+    exercise.resize(480, 320)
+    exercise.show()
+    assert QColor(popup.grab().toImage().pixel(6, popup.height() // 2)).name() == theme.DARK.hero.lower()
+    assert QColor(exercise.grab().toImage().pixel(40, 300)).name() == theme.DARK.bg
+    popup.hide()
+    exercise.hide()

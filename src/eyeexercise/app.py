@@ -26,7 +26,7 @@ from eyeexercise.ui.icons import app_icon
 from eyeexercise.ui.main_window import MainWindow
 from eyeexercise.ui.reminder_popup import ReminderPopup
 from eyeexercise.ui.single_instance import SingleInstance
-from eyeexercise.ui.speech import create_speaker
+from eyeexercise.ui.speech import create_alert, create_speaker
 from eyeexercise.ui.tray import TrayIcon
 
 log = logging.getLogger(__name__)
@@ -58,6 +58,7 @@ class TrayApp:
         self.controller = Controller(scheduler, self.history, usage_tracker=usage_tracker)
         app.aboutToQuit.connect(self.controller.flush_usage)  # 로그오프·종료 때도 마지막 구간을 저장한다
         self.popup = ReminderPopup(settings.snooze_minutes)
+        self.popup.set_alert(create_alert(settings.sound.enabled))
         self.exercise_window = ExerciseWindow(create_speaker(settings.sound.enabled))
         settings_file = paths.settings_path()
         self.settings_manager = SettingsManager(settings, save=lambda s: json_store.save_settings(settings_file, s))
@@ -117,6 +118,7 @@ class TrayApp:
             theme.set_mode(new.appearance)
         if new.sound.enabled != old.sound.enabled:
             self.exercise_window.set_speaker(create_speaker(new.sound.enabled))
+            self.popup.set_alert(create_alert(new.sound.enabled))
 
     def _on_state_changed(self, state: State) -> None:
         # 버튼이든 트레이 메뉴든, 알림 상태를 벗어나면 팝업을 닫는다.

@@ -207,6 +207,7 @@ def set_dark(dark: bool) -> None:
             continue
         try:
             widget.setStyleSheet(render(template))
+            _repolish(widget)
         except RuntimeError:  # C++ 쪽이 이미 사라진 위젯
             continue
         alive.append((ref, template))
@@ -220,6 +221,14 @@ def set_dark(dark: bool) -> None:
             callback()
         except RuntimeError:  # C++ 쪽이 이미 사라진 위젯의 메서드
             _listeners.remove(listener)
+
+
+def _repolish(widget: QWidget) -> None:
+    """스타일을 새로 적용한다. 아직 한 번도 보이지 않은 창(팝업·운동 창)은 스타일 시트만 바꾸면 이전 색이 남아서,
+    다크 모드로 바뀐 뒤 처음 뜰 때 옛 색으로 보인다."""
+    for w in (widget, *widget.findChildren(QWidget)):
+        w.style().unpolish(w)
+        w.style().polish(w)
 
 
 def on_changed(callback) -> None:

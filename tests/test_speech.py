@@ -300,3 +300,82 @@ def test_대체_음성_없이도_동작한다(tmp_path):
 def test_프로젝트_assets_폴더_위치가_맞다():
     assert speech.SOUNDS_DIR.name == "sounds" and speech.SOUNDS_DIR.parent.name == "assets"
     assert (speech.SOUNDS_DIR.parents[1] / "pyproject.toml").is_file()
+
+
+# ---- 알림음 (알림 팝업이 뜰 때) ----
+
+
+class AlertEffect:
+    def __init__(self, path) -> None:
+        self.path = path
+        self.played = 0
+        self.stopped = 0
+
+    def play(self) -> None:
+        self.played += 1
+
+    def stop(self) -> None:
+        self.stopped += 1
+
+
+def test_알림음_파일이_있으면_그것을_재생한다(tmp_path):
+    (tmp_path / "alert.wav").write_bytes(b"x")
+    made = []
+    alert = speech.AlertSound(tmp_path, effect_factory=lambda p: made.append(AlertEffect(p)) or made[-1])
+    alert.play()
+    alert.play()
+    assert [e.path.name for e in made] == ["alert.wav"] and made[0].played == 2
+    alert.stop()
+    assert made[0].stopped == 1
+
+
+def test_알림음_파일이_없으면_기본_알림음으로_대신한다(tmp_path, monkeypatch):
+    beeps = []
+    monkeypatch.setattr(speech.AlertSound, "_system_beep", staticmethod(lambda: beeps.append(1)))
+    alert = speech.AlertSound(tmp_path)
+    alert.play()
+    threading.Event().wait(0.2)
+    assert beeps == [1]
+
+
+def test_알림음_파일을_불러오지_못해도_기본_알림음으로_대신한다(tmp_path, monkeypatch):
+    (tmp_path / "alert.wav").write_bytes(b"x")
+    beeps = []
+    monkeypatch.setattr(speech.AlertSound, "_system_beep", staticmethod(lambda: beeps.append(1)))
+
+    def broken(_path):
+        raise RuntimeError("재생기를 만들 수 없다")
+
+    speech.AlertSound(tmp_path, effect_factory=broken).play()
+    threading.Event().wait(0.2)
+    assert beeps == [1]
+
+
+def test_알림음_재생기가_오류_상태이면_기본_알림음을_쓴다(tmp_path, monkeypatch):
+    (tmp_path / "alert.wav").write_bytes(b"x")
+    beeps = []
+    monkeypatch.setattr(speech.AlertSound, "_system_beep", staticmethod(lambda: beeps.append(1)))
+
+    class Broken(AlertEffect):
+        def status(self):
+            return types.SimpleNamespace(name="Error")
+
+    alert = speech.AlertSound(tmp_path, effect_factory=Broken)
+    alert.play()
+    threading.Event().wait(0.2)
+    assert beeps == [1] and alert._effect.played == 0
+
+
+def test_소리를_끄면_알림음을_만들지_않는다(tmp_path):
+    assert speech.create_alert(False, tmp_path) is None
+    assert isinstance(speech.create_alert(True, tmp_path), speech.AlertSound)
+
+
+def test_저장소의_알림음_파일은_부드럽고_짧다():
+    import wave
+
+    path = speech.SOUNDS_DIR / "alert.wav"
+    assert path.is_file()
+    with wave.open(str(path)) as w:
+        assert w.getnchannels() == 1 and w.getsampwidth() == 2
+        assert 1.0 <= w.getnframes() / w.getframerate() <= 4.0  # 길어서 거슬리지 않게

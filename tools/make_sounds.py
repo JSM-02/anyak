@@ -1,7 +1,7 @@
 """운동 안내 소리(`assets/sounds/*.wav`)를 합성한다. 외부 음원이나 의존성 없이 표준 라이브러리만 쓴다.
 
 사용법 (프로젝트 폴더에서):
-    .venv\\Scripts\\python tools\\make_sounds.py                      # assets/sounds에 4개 파일을 다시 만든다
+    .venv\\Scripts\\python tools\\make_sounds.py                      # assets/sounds에 5개 파일을 다시 만든다
     .venv\\Scripts\\python tools\\make_sounds.py 출력폴더              # 다른 폴더에 만든다
     .venv\\Scripts\\python tools\\make_sounds.py 출력폴더 --preview 미리듣기.wav   # 실제 흐름을 이어 붙인 미리듣기도 만든다
 
@@ -10,6 +10,7 @@
     cycle.wav     한 사이클(감기·유지·뜨기·쉬기). 감기 시작에 낮은 종, 뜨기 시작에 높은 종이 울린다
     finish.wav    마무리: 종 두 번이 올라가며 마친다
     look_away.wav 먼 곳 바라보기: 느리게 울리는 낮은 종 두 번
+    alert.wav     알림 팝업: 짧고 부드러운 종 두 번이 올라가며 울린다 (놀라지 않게 작고 맑게)
 
 사이클 길이와 단계 시간은 `eyeexercise.core.exercises`의 상수를 그대로 가져온다. 그 상수를 바꾸면
 이 스크립트를 다시 실행해 소리를 맞춰야 한다. (패키지가 설치돼 있어야 한다: pip install -e .)
@@ -246,6 +247,12 @@ def look_away_track():
     return finalize(diffuse_reverb(mix(parts)))
 
 
+def alert_track():
+    """알림 팝업이 뜰 때 나는 소리. 일하는 중에 울려도 놀라지 않도록 짧고 작고 맑게 만든다."""
+    parts = [(0.0, bowl(1.3, E4 * 2, 0.45, 0.55, 26)), (0.22, bowl(1.6, C5 * 1.5, 0.55, 0.6, 27))]
+    return [v * 0.7 for v in finalize(diffuse_reverb(mix(parts), tail_seconds=0.6))]  # 운동 안내보다 작게
+
+
 def preview(tracks, duration_seconds=30):
     """앱이 재생할 타이밍 그대로 이어 붙인 미리듣기. 사이클은 사이클 길이마다 겹쳐서 재생한다."""
     timeline = blink_timeline(duration_seconds)
@@ -271,6 +278,7 @@ def main():
         "prepare": prepare_track(),
         "finish": finish_track(),
         "look_away": look_away_track(),
+        "alert": alert_track(),
     }
     for name, samples in tracks.items():
         save(args.out_dir / f"{name}.wav", samples)
