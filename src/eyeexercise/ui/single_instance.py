@@ -72,4 +72,7 @@ class SingleInstance(QObject):
         while self._server.hasPendingConnections():
             socket = self._server.nextPendingConnection()
             socket.disconnected.connect(socket.deleteLater)
+            # 보낸 내용은 쓰지 않는다. 연결 자체가 "창을 열어 달라"는 신호다.
+            # 읽지 않은 채 두면 다른 프로세스가 보낸 데이터가 끊임없이 메모리에 쌓이므로 바로 닫는다.
+            socket.disconnectFromServer()
             self.activated.emit()
