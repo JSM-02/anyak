@@ -18,7 +18,7 @@ sys.path.insert(0, str(ROOT / "src"))
 from eyeexercise import __version__  # noqa: E402
 
 TOP_FILES = ["README.md", "LICENSE", "THIRD-PARTY-NOTICES.txt"]
-TOP_DIRS = ["LICENSES"]
+TOP_DIRS = ["LICENSES", "docs/images"]  # README의 스크린샷이 압축을 푼 뒤에도 보이게 한다
 
 
 def main() -> int:

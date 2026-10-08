@@ -20,7 +20,7 @@ LGPL-3.0에 따라, 쉬엄은 Qt 라이브러리를 동적 라이브러리(DLL) 
 사용자는 다음과 같이 Qt 라이브러리를 직접 교체할 수 있습니다.
   - 이 프로그램 폴더의 `_internal` 폴더 안에 있는 `PySide6` 폴더(Qt*.dll, *.pyd 파일)를
     호환되는 같은 버전(6.11.x)의 PySide6 파일로 바꿔 넣으면 됩니다.
-  - 쉬엄의 소스 코드는 https://github.com/JSM-02 에서 공개할 예정이며, 직접 빌드할 수도 있습니다.
+  - 쉬엄의 소스 코드는 https://github.com/JSM-02/swieom 에서 공개할 예정이며, 직접 빌드할 수도 있습니다.
 Qt는 libpng, FreeType, HarfBuzz, zlib 등 자체 서드파티 구성 요소를 포함합니다.
 각 구성 요소의 고지는 https://doc.qt.io/qt-6/licenses-used-in-qt.html 에서 볼 수 있습니다.
 
