@@ -1,0 +1,34 @@
+name: tests
+
+# main에 올리거나 PR이 열릴 때 테스트를 자동으로 돌린다.
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# 저장소 내용을 읽기만 한다 (쓰기 권한과 토큰 노출을 최소로).
+permissions:
+  contents: read
+
+jobs:
+  pytest:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      # 액션은 태그가 아니라 커밋 해시로 고정한다 (태그는 나중에 다른 코드로 옮겨질 수 있다).
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements*.txt
+      - name: 의존성 설치
+        run: |
+          python -m pip install -r requirements-dev.txt
+          python -m pip install -e .
+      - name: 테스트
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: python -m pytest -q

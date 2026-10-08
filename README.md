@@ -1,5 +1,7 @@
 # 쉬엄
 
+[![tests](https://github.com/JSM-02/swieom/actions/workflows/tests.yml/badge.svg)](https://github.com/JSM-02/swieom/actions/workflows/tests.yml)
+
 PC를 쓰는 동안 일정 간격으로 눈 운동을 알려 주는 Windows 트레이 상주 앱입니다.
 (코드 이름: EyeExercise)
 
@@ -102,7 +104,7 @@ exe 빌드와 배포용 zip 만들기:
 ## 사용한 오픈소스
 - [PySide6 (Qt for Python)](https://doc.qt.io/qtforpython-6/): GUI. LGPL v3 등으로 제공됩니다.
 - [pytest](https://pytest.org/): 테스트.
-- [PyInstaller](https://pyinstaller.org/): exe 빌드(예정).
+- [PyInstaller](https://pyinstaller.org/): exe 빌드(폴더형).
 
 ## 라이선스
 [MIT 라이선스](LICENSE)입니다. 작동에 대한 보증이 없고, 사용으로 생긴 문제에 책임지지 않습니다.
