@@ -17,10 +17,11 @@ from pathlib import Path
 from typing import Protocol
 
 from eyeexercise.core.exercises import SPOKEN, Phase
+from eyeexercise.resources import assets_dir
 
 log = logging.getLogger(__name__)
 
-SOUNDS_DIR = Path(__file__).resolve().parents[3] / "assets" / "sounds"
+SOUNDS_DIR = assets_dir() / "sounds"
 
 # 단계가 시작될 때 재생하는 파일 (assets/sounds/<이름>.wav)
 PHASE_FILES = {

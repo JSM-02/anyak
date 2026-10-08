@@ -36,6 +36,16 @@ PC를 쓰는 동안 일정 간격으로 눈 운동을 알려 주는 Windows 트�
 
 파일이 손상되면 `.corrupt` 이름으로 백업하고 새로 시작합니다.
 
+## 설치 (exe)
+1. 받은 zip(`Swieom-<버전>-win64.zip`)의 압축을 풉니다. 폴더 안의 `_internal` 폴더는 지우지 마세요.
+2. `Swieom.exe`를 실행하면 트레이에 아이콘이 생기고 메인 창이 뜹니다. 설치 과정은 없습니다.
+3. 지우려면 트레이 메뉴의 "종료"로 끈 뒤 폴더를 지웁니다. 기록까지 지우려면 `%APPDATA%\Swieom` 폴더도 지우세요.
+
+### "Windows의 PC 보호" 경고가 뜰 때
+쉬엄은 아직 코드 서명(유료 인증서)이 없어서, 내려받은 파일을 처음 실행하면 Windows SmartScreen이 경고를 띄울 수 있습니다.
+**"추가 정보" → "실행"** 을 누르면 실행됩니다. 이 경고는 프로그램이 위험하다는 뜻이 아니라 서명되지 않은 새 프로그램이라는 뜻입니다.
+소스 코드가 공개되어 있고 네트워크 통신을 하지 않으므로, 의심되면 직접 확인할 수 있습니다.
+
 ## 소스에서 실행하기
 Windows와 Python 3.12가 필요합니다.
 
@@ -50,6 +60,13 @@ py -3.12 -m venv .venv
 
 ```
 .venv\Scripts\python -m pytest
+```
+
+exe 빌드와 배포용 zip 만들기:
+
+```
+.venv\Scripts\python -m PyInstaller eyeexercise.spec --noconfirm
+.venv\Scripts\python tools\package_release.py
 ```
 
 ## 구조
