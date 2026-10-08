@@ -41,6 +41,7 @@ class Source:
 def make_tab(qapp, events=()):
     source = Source(events)
     tab = RecordsTab(source, now=lambda: NOW, tz=KST)
+    tab.set_period(Period.WEEK)  # 앱의 처음 화면은 일 보기이지만 이 테스트는 주 보기 기준이다
     tab.resize(520, 900)
     tab.show()
     qapp.processEvents()
@@ -90,7 +91,7 @@ def test_기록이_없어도_정상적으로_보인다(qapp):
     assert tab._caption.text() == "10월 5일 – 10월 11일"
     assert tab._chart.axis_max == 4
     assert tab._timeline._empty_text == "아직 기록이 없어요" and all(d.is_empty for d in tab._timeline._days)
-    assert [v.text() for v in tab._highlight_values] == ["0.0회", "0회", "0회"]
+    assert [v.text() for v in tab._highlight_values] == ["–", "0회", "0.0개"]
 
 
 def test_이번_주가_기본이고_일_주_월_버튼이_있다(qapp):
@@ -110,8 +111,8 @@ def test_큰_숫자와_하이라이트가_기록을_반영한다(qapp):
     assert count_in_header(tab) == 3
     labels = [lbl.text() for lbl in tab._highlight_labels]
     values = [v.text() for v in tab._highlight_values]
-    assert labels == ["하루 평균", "건너뜀", "미룸"]
-    assert values == ["1.0회", "1회", "0회"]
+    assert labels == ["휴식 달성률", "건너뜀", "휴식 시간대"]
+    assert values == ["–", "1회", "1.0개"]  # 사용 기록이 없어 달성률은 없다. 휴식 시간대 3개 ÷ 월~수 3일
 
 
 def test_기간을_바꾸면_막대_수와_제목이_바뀐다(qapp):
@@ -121,7 +122,7 @@ def test_기간을_바꾸면_막대_수와_제목이_바뀐다(qapp):
     assert len(tab._chart._buckets) == 24
     assert tab._caption.text() == "2026년 10월 7일 수요일"
     assert count_in_header(tab) == 2
-    assert [lbl.text() for lbl in tab._highlight_labels] == ["건너뜀", "미룸", "쉰 시간대"]
+    assert [lbl.text() for lbl in tab._highlight_labels] == ["휴식 달성률", "건너뜀", "휴식 시간대"]
     tab.set_period(Period.MONTH)
     assert tab._nav_title.text() == "이번 달"
     assert len(tab._chart._buckets) == 31
@@ -149,7 +150,7 @@ def test_이전_주로_가면_그_주_기록을_보여_준다(qapp):
     assert tab._caption.text() == "9월 28일 – 10월 4일"
     assert count_in_header(tab) == 3
     assert tab._next.isEnabled()
-    assert [v.text() for v in tab._highlight_values][0] == "0.4회"  # 7일로 나눈 평균 (3/7)
+    assert [v.text() for v in tab._highlight_values][2] == "0.4개"  # 휴식 시간대 3개 ÷ 7일
     tab.go(1)
     assert tab._nav_title.text() == "이번 주" and count_in_header(tab) == 1
 
@@ -341,6 +342,7 @@ def test_하루_흐름이_실제로_그려진다(qapp):
         HistoryEvent(at(10, 7, 11, 20), "snoozed", activity="rest"),
     ]
     tab = RecordsTab(Source(events), now=lambda: NOW, tz=KST, usage_provider=lambda: usage)
+    tab.set_period(Period.WEEK)  # 앱의 처음 화면은 일 보기이지만 이 테스트는 주 보기 기준이다
     tab.resize(900, 900)
     tab.show()
     qapp.processEvents()
@@ -418,8 +420,8 @@ def test_선택한_막대는_새로_그려도_유지된다(qapp):
 
 def test_메인_창에_기록_탭이_있다(qapp):
     window = MainWindow()
-    assert window.sidebar.label(0) == "기록"
-    assert window._stack.widget(0) is window.records_tab
+    assert window.sidebar.label(1) == "기록"
+    assert window._stack.widget(1) is window.records_tab
 
 
 def test_메인_창은_기록을_받아_보여_준다(qapp):
@@ -473,26 +475,26 @@ def test_무시된_요청과_중단은_기록이_바뀌었다고_알리지_않�
 # ---- 메인 창: 왼쪽 메뉴 + 넓은 본문 ----
 
 
-def test_왼쪽_메뉴에_기록_설정_시력_기록이_있다(qapp):
+def test_왼쪽_메뉴에_홈_기록_시력_기록_설정이_있다(qapp):
     window = MainWindow()
-    assert [window.sidebar.label(i) for i in range(window.sidebar.count())] == ["기록", "시력 기록", "설정"]
-    assert window.sidebar.current() == 0 and window._stack.currentWidget() is window.records_tab
+    assert [window.sidebar.label(i) for i in range(window.sidebar.count())] == ["홈", "기록", "시력 기록", "설정"]
+    assert window.sidebar.current() == 0 and window._stack.currentWidget() is window.home_page
 
 
 def test_메뉴를_고르면_본문이_바뀐다(qapp):
     window = MainWindow()
     window.sidebar.set_current(1)
-    assert window._stack.currentIndex() == 1 and window._stack.currentWidget() is not window.records_tab
-    window.sidebar.set_current(2)
-    assert window._stack.currentIndex() == 2
+    assert window._stack.currentIndex() == 1 and window._stack.currentWidget() is window.records_tab
+    window.sidebar.set_current(3)
+    assert window._stack.currentIndex() == 3
     window.sidebar.set_current(0)
-    assert window._stack.currentWidget() is window.records_tab
+    assert window._stack.currentWidget() is window.home_page
 
 
 def test_설정과_시력_기록_메뉴는_각각_실제_화면이다(qapp):
     window = MainWindow()
-    assert window._stack.widget(1) is window.vision_page
-    assert window._stack.widget(2) is window.settings_page
+    assert window._stack.widget(2) is window.vision_page
+    assert window._stack.widget(3) is window.settings_page
 
 
 def test_메인_창은_넓은_데스크톱_크기로_뜨고_더_작아지지_않는다(qapp):
@@ -509,7 +511,11 @@ def test_메인_창은_넓은_데스크톱_크기로_뜨고_더_작아지지_않
 
 def test_하이라이트_카드는_보조_설명이_있을_때만_보여_준다(qapp):
     tab, _ = make_tab(qapp)
-    assert all(d.isHidden() for d in tab._highlight_details)  # 운동 카드에는 보조 설명이 없다
+    tab.set_period(Period.DAY)
+    details = tab._highlight_details
+    assert [d.isHidden() for d in details] == [False, True, True]  # 하루 보기에서는 달성률의 '사용 시간이 짧아요'만 있다
+    tab.set_period(Period.WEEK)
+    assert [d.text() for d in details] == ["사용 시간이 짧아요", "", "하루 평균"]  # 주·월 보기의 휴식 시간대는 하루 평균임을 알린다
 
 
 def test_가로축은_이른_기록이_있으면_그_시각부터_보인다(qapp):
@@ -529,17 +535,17 @@ def test_가로축은_이른_기록이_있으면_그_시각부터_보인다(qapp
 def test_구분이_없는_옛_건너뜀은_어느_화면에도_세지_않는다(qapp):
     events = [done(at(10, 7, 9)), HistoryEvent(at(10, 7, 10), "skipped"), HistoryEvent(at(10, 7, 11), "snoozed")]
     tab, _ = make_tab(qapp, events)
-    skipped_card = tab._highlight_values[2].text()
+    skipped_card = tab._highlight_values[1].text()
     assert skipped_card == "0회"
     assert tab._timeline._days[0].skipped == 0 and tab._timeline._days[0].snoozed == 0
 
 
-def test_하루_줄_오른쪽에_휴식_운동_건너뜀_횟수가_적힌다(qapp):
+def test_하루_줄_오른쪽에_휴식_운동_횟수만_적힌다(qapp):
     events = [done(at(10, 7, 9)), done(at(10, 7, 10)), done(at(10, 7, 11), "dot_follow", 60), HistoryEvent(at(10, 7, 12), "skipped", activity="rest")]
     tab, _ = make_tab(qapp, events)
     from eyeexercise.ui.records_tab import activity_summary
 
-    assert activity_summary(tab._timeline._days[0]) == "휴식 2회 · 운동 1회 · 건너뜀 1회"
+    assert activity_summary(tab._timeline._days[0]) == "휴식 2회 · 운동 1회"
 
 
 def test_창이_커져도_오늘_요약_카드는_내용만큼만_차지한다(qapp):
@@ -567,8 +573,8 @@ def test_눈_휴식_화면은_휴식만_세고_눈_운동은_전환이_없다(qa
     tab, _ = make_tab(qapp, events)
     assert [m.value for m in Mode] == ["rest", "screen_time"]  # 눈 운동 화면은 없다
     assert tab.mode is Mode.REST and tab._kicker.text() == "눈 휴식" and count_in_header(tab) == 2  # 운동은 세지 않는다
-    assert [lbl.text() for lbl in tab._highlight_labels] == ["하루 평균", "건너뜀", "미룸"]
-    assert "시간" not in " ".join(lbl.text() for lbl in tab._highlight_labels)  # 휴식 시간·운동 시간은 보여 주지 않는다
+    assert [lbl.text() for lbl in tab._highlight_labels] == ["휴식 달성률", "건너뜀", "휴식 시간대"]
+    assert "운동 시간" not in " ".join(lbl.text() for lbl in tab._highlight_labels)  # 휴식 시간·운동 시간은 보여 주지 않는다
 
 
 def test_눈_운동_횟수는_오늘_요약과_하루_흐름에서_볼_수_있다(qapp):
@@ -602,3 +608,67 @@ def test_하루_보기의_쉰_시간대는_휴식이_있었던_시간대_수다(
     tab, _ = make_tab(qapp, [done(at(10, 7, 9)), done(at(10, 7, 9, 40)), done(at(10, 7, 14))])
     tab.set_period(Period.DAY)
     assert tab._highlight_values[2].text() == "2개"  # 9시대와 14시대
+
+
+def test_기록_탭은_처음에_일_보기로_열린다(qapp):
+    tab = RecordsTab(Source(), now=lambda: NOW, tz=KST)
+    assert tab.period is Period.DAY
+
+
+# ---- 건너뜀 ‹ › 미룸 이동 (눈 휴식 하이라이트 둘째 카드) ----
+
+
+def test_둘째_카드는_화살표로_건너뜀과_미룸을_오간다(qapp):
+    events = [
+        done(at(10, 7, 9)),
+        HistoryEvent(at(10, 7, 10), "skipped", activity="rest"),
+        HistoryEvent(at(10, 7, 11), "snoozed", activity="rest"),
+        HistoryEvent(at(10, 7, 12), "snoozed", activity="rest"),
+    ]
+    tab, _ = make_tab(qapp, events)
+    assert not tab._skip_prev.isHidden() and not tab._skip_next.isHidden()
+    assert (tab._skip_prev.text(), tab._skip_next.text()) == ("‹", "›")
+    assert tab._highlight_labels[1].text() == "건너뜀" and tab._highlight_values[1].text() == "1회"
+    tab._skip_next.click()
+    assert tab._highlight_labels[1].text() == "미룸" and tab._highlight_values[1].text() == "2회"
+    tab.refresh()  # 새로 그려도 고른 것이 유지된다
+    assert tab._highlight_values[1].text() == "2회"
+    tab._skip_next.click()  # 둘뿐이라 한 바퀴 돌아 건너뜀으로 돌아온다
+    assert tab._highlight_labels[1].text() == "건너뜀"
+    tab._skip_prev.click()
+    assert tab._highlight_labels[1].text() == "미룸"
+    tab._skip_prev.click()
+    assert tab._highlight_labels[1].text() == "건너뜀" and tab._highlight_values[1].text() == "1회"
+
+
+def test_화살표는_눈_휴식_화면에만_있다(qapp):
+    tab, _ = make_tab(qapp)
+    tab.set_mode(Mode.SCREEN_TIME)
+    assert tab._skip_prev.isHidden() and tab._skip_next.isHidden()
+    tab.set_mode(Mode.REST)
+    assert not tab._skip_prev.isHidden() and not tab._skip_next.isHidden()
+
+
+def test_일_월로_바꿔도_고른_미룸이_유지된다(qapp):
+    tab, _ = make_tab(qapp, [HistoryEvent(at(10, 7, 10), "snoozed", activity="rest")])
+    tab._skip_next.click()
+    for period in (Period.DAY, Period.MONTH, Period.WEEK):
+        tab.set_period(period)
+        assert tab._highlight_labels[1].text() == "미룸" and tab._highlight_values[1].text() == "1회"
+
+
+def test_스크린_타임_카드는_두_개일_때_내용만큼만_차지한다(qapp):
+    tab, _ = make_tab(qapp, [done(at(10, 7, 9))])
+    tab.resize(1000, 1100)
+    qapp.processEvents()
+    chart_card = tab._chart.parentWidget()
+    assert abs(sum(card.height() for card in tab._highlight_cards) - chart_card.height()) < 40  # 눈 휴식 화면의 세 카드는 차트 높이를 채운다
+    tab.set_mode(Mode.SCREEN_TIME)
+    qapp.processEvents()
+    shown = [card for card in tab._highlight_cards if not card.isHidden()]
+    assert len(shown) == 2 and tab._highlight_cards[2].isHidden()
+    assert all(card.height() <= card.sizeHint().height() + 8 for card in shown)  # 늘어나지 않고 내용 높이를 쓴다
+    assert sum(card.height() for card in shown) < chart_card.height() * 0.6  # 빈 공간이 줄었다
+    tab.set_mode(Mode.REST)
+    qapp.processEvents()
+    assert abs(sum(card.height() for card in tab._highlight_cards) - chart_card.height()) < 40  # 돌아오면 다시 채운다

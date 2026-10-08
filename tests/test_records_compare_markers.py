@@ -34,6 +34,7 @@ def usage_of(entries):
 def make_tab(qapp, events=(), entries=()):
     state = {"events": list(events), "usage": usage_of(entries)}
     tab = RecordsTab(lambda: state["events"], now=lambda: NOW, tz=KST, usage_provider=lambda: state["usage"])
+    tab.set_period(Period.WEEK)  # 앱의 처음 화면은 일 보기이지만 이 테스트는 주 보기 기준이다
     tab.resize(1000, 900)
     tab.show()
     qapp.processEvents()
@@ -160,7 +161,7 @@ def test_기록이_하나도_없어도_오늘_요약이_보인다(qapp):
 
 def test_범례는_칸_색과_눈_운동_숫자의_뜻을_보여_준다(qapp):
     tab, _ = make_tab(qapp, [rest(at(10, 7, 14))])
-    assert [plain(t) for t in texts(tab, "legendItem")] == ["▬ 스크린 타임 (진할수록 오래)", "2 마친 눈 운동 횟수"]
+    assert [plain(t) for t in texts(tab, "legendItem")] == ["■ 스크린 타임 · 숫자는 눈 운동 횟수"]
     assert not tab._legend.isHidden()
     assert [c.lower() for c in re.findall(r"#[0-9a-fA-F]{6}", " ".join(texts(tab, "legendItem")))] == ["#2a835f"]  # 칸 색은 포인트 색(초록)
 

@@ -293,11 +293,11 @@ def dot_window(qapp, speaker=None, duration=60, area=SCREEN):
     return window, events
 
 
-def test_점_따라가기는_화면의_70퍼센트_크기_창과_점_화면을_쓴다(qapp):
+def test_점_따라가기는_화면의_큰_창과_점_화면을_쓴다(qapp):
     window, _ = dot_window(qapp)
     assert window.isVisible() and window.running
     assert window._dots.isVisible() and not window._eye.isVisible()
-    assert (window.width(), window.height()) == (1344, 728)  # 1920×1040의 70%
+    assert (window.width(), window.height()) == (1344, 915)  # 1920×1040의 너비 70%·높이 88%
     window.close()
 
 
@@ -419,17 +419,17 @@ def test_깜빡임_창은_화면_크기와_상관없이_고정이다():
         assert window_size("blink", area) == (480, 320)
 
 
-def test_점_따라가기_창은_화면의_70퍼센트이고_큰_화면일수록_커진다():
-    assert window_size("dot_follow", QRect(0, 0, 1920, 1040)) == (1344, 728)
-    assert window_size("dot_follow", QRect(0, 0, 2560, 1400)) == (1792, 980)
-    assert window_size("dot_follow", QRect(0, 0, 1366, 728)) == (956, 510)  # 728*0.7=509.6
+def test_점_따라가기_창은_너비_70퍼센트_높이_88퍼센트이고_큰_화면일수록_커진다():
+    assert window_size("dot_follow", QRect(0, 0, 1920, 1040)) == (1344, 915)
+    assert window_size("dot_follow", QRect(0, 0, 2560, 1400)) == (1792, 1232)
+    assert window_size("dot_follow", QRect(0, 0, 1366, 728)) == (956, 641)  # 728*0.88=640.6
 
 
 def test_점_따라가기_창은_작은_화면에서도_최소_크기를_지키되_화면_밖으로_나가지_않는다():
-    assert window_size("dot_follow", QRect(0, 0, 800, 600)) == (640, 440)  # 70%(560×420)가 최소 640×440보다 작으면 최소 크기
+    assert window_size("dot_follow", QRect(0, 0, 800, 600)) == (640, 528)  # 너비는 70%(560)가 최소 640보다 작아 최소 크기, 높이는 88%(528)
     w, h = window_size("dot_follow", QRect(0, 0, 600, 400))
     assert (w, h) == (560, 360)  # 화면보다 크게 뜨지 않는다 (여백 40)
-    assert window_size("dot_follow", QRect(0, 0, 1024, 600)) == (717, 440)  # 너비만 70%가 최소보다 크다
+    assert window_size("dot_follow", QRect(0, 0, 1024, 600)) == (717, 528)  # 너비 70%(717)와 높이 88%(528)가 모두 최소보다 크다
 
 
 def test_점_따라가기_창은_깜빡임_창보다_크다():
@@ -445,7 +445,7 @@ def test_점_따라가기도_먼_곳_바라보기에서는_깜빡임과_같은_�
     window, _ = dot_window(qapp)
     window._elapsed.ms = 59000  # 마무리(점이 가운데로 돌아오는 중)
     window._on_frame()
-    assert window._dots.isVisible() and (window.width(), window.height()) == (1344, 728)
+    assert window._dots.isVisible() and (window.width(), window.height()) == (1344, 915)
     before = window.geometry().center()
 
     window._elapsed.ms = 60000  # 먼 곳 바라보기 시작
@@ -479,7 +479,7 @@ def test_먼_곳_바라보기_뒤_다시_시작하면_큰_창으로_돌아온다
     window._on_frame()
     window.close()
     window.start(dot_follow_timeline(60))
-    assert (window.width(), window.height()) == (1344, 728)
+    assert (window.width(), window.height()) == (1344, 915)
     assert window._dots.isVisible() and not window._eye.isVisible()
     window.close()
 

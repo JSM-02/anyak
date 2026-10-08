@@ -19,17 +19,18 @@ from eyeexercise.ui.speech import Speaker
 # 깜빡임은 눈을 감고 소리로도 안내하므로 작게, 점 따라가기는 점이 움직일 영역이 필요해서 크게 띄운다.
 WINDOW_SIZES = {EXERCISE_BLINK: (480, 320), EXERCISE_DOT_FOLLOW: (640, 440)}
 WINDOW_SIZE = WINDOW_SIZES[EXERCISE_BLINK]
-DOT_WINDOW_SCREEN_RATIO = 0.7  # 점 따라가기 창이 차지하는 화면 비율. 눈동자가 크게 움직이도록 크게 띄운다
+DOT_WINDOW_WIDTH_RATIO = 0.7  # 점 따라가기 창이 차지하는 화면 너비 비율. 눈동자가 크게 움직이도록 크게 띄운다
+DOT_WINDOW_HEIGHT_RATIO = 0.88  # 세로는 안내 문구·진행 바·버튼이 자리를 차지해서 점이 움직일 영역이 좁아지므로 더 크게 잡는다
 _SCREEN_MARGIN = 40  # 화면 가장자리에서 띄우는 최소 여백
 
 
 def window_size(exercise: str, area: QRect) -> tuple[int, int]:
-    """운동 창의 크기. 깜빡임은 고정 크기, 점 따라가기는 화면의 70%(최소 크기 이상, 화면 안에서)."""
+    """운동 창의 크기. 깜빡임은 고정 크기, 점 따라가기는 화면 너비의 70%·높이의 88%(최소 크기 이상, 화면 안에서)."""
     if exercise != EXERCISE_DOT_FOLLOW:
         return WINDOW_SIZES[exercise]
     min_w, min_h = WINDOW_SIZES[EXERCISE_DOT_FOLLOW]
-    width = max(min_w, round(area.width() * DOT_WINDOW_SCREEN_RATIO))  # int()는 1400*0.7=979.99…를 979로 자른다
-    height = max(min_h, round(area.height() * DOT_WINDOW_SCREEN_RATIO))
+    width = max(min_w, round(area.width() * DOT_WINDOW_WIDTH_RATIO))  # int()는 1400*0.7=979.99…를 979로 자른다
+    height = max(min_h, round(area.height() * DOT_WINDOW_HEIGHT_RATIO))
     return min(width, area.width() - _SCREEN_MARGIN), min(height, area.height() - _SCREEN_MARGIN)
 _FRAME_MS = 16  # 약 60fps. 정밀 타이머를 함께 써야 Windows에서 간격이 고르다 (거친 타이머는 33ms가 실제 약 21fps)
 

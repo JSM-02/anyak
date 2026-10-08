@@ -113,7 +113,7 @@ def test_컨트롤러가_없으면_알약은_비어_있어도_창이_뜬다(qapp
 
 def test_메뉴를_누르면_본문이_바뀐다(qapp):
     window = MainWindow()
-    window.sidebar._buttons[1].click()
+    window.sidebar._buttons[2].click()
     assert window._stack.currentWidget() is window.vision_page
-    QTest.mouseClick(window.sidebar._buttons[2], Qt.MouseButton.LeftButton)
+    QTest.mouseClick(window.sidebar._buttons[3], Qt.MouseButton.LeftButton)
     assert window._stack.currentWidget() is window.settings_page

@@ -59,10 +59,16 @@ class ReminderScheduler:
     @property
     def remaining_seconds(self) -> float | None:
         """다음 알림까지 남은 시간. 카운트다운 중이 아니면(알림·운동 중) None."""
+        target = self.target_seconds
+        return None if target is None else max(0.0, target - self._elapsed)
+
+    @property
+    def target_seconds(self) -> float | None:
+        """지금 세고 있는 카운트다운의 전체 길이(휴식 주기 또는 미루기 시간). 카운트다운 중이 아니면 None. 일시정지 중에는 멈추기 전 상태의 값이다."""
         state = self._paused_from if self._state is State.PAUSED else self._state
         if state not in _COUNTING:
             return None
-        return max(0.0, self._target_seconds(state) - self._elapsed)
+        return self._target_seconds(state)
 
     # ---- 시간 진행 ----
 

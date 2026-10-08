@@ -26,8 +26,10 @@ from PySide6.QtWidgets import (
 )
 
 from eyeexercise.core.clock import SystemClock
-from eyeexercise.core.history import ACTIVITY_EXERCISE, ACTIVITY_REST, HistoryEvent
+from eyeexercise.core.history import ACTIVITY_EXERCISE, ACTIVITY_REST, EVENT_SKIPPED, EVENT_SNOOZED, HistoryEvent
 from eyeexercise.core.stats import (
+    SKIP_KINDS,
+    Highlight,
     TREND_SYMBOLS,
     Period,
     PeriodCompare,
@@ -42,7 +44,6 @@ from eyeexercise.core.stats import (
     format_usage,
     format_usage_axis,
     rest_stats,
-    highlights_with_compare,
     nice_axis_max,
     nice_usage_axis,
     previous_label,
@@ -52,11 +53,14 @@ from eyeexercise.core.stats import (
     summarize_range,
     summarize_usage,
     timeline_days,
+    rest_highlights_with_compare,
+    rest_slot_count,
     usage_highlights_with_compare,
     usage_parts,
 )
 from eyeexercise.core.usage import UsageLog
 from eyeexercise.ui import theme
+from eyeexercise.ui.gauge import RingGauge
 
 _PERIOD_LABELS = ((Period.DAY, "일"), (Period.WEEK, "주"), (Period.MONTH, "월"))
 RECENT_COLLAPSED = 7  # 처음에 보여 주는 하루 타임라인 일수
@@ -80,6 +84,8 @@ _STYLE = """
     background: transparent; border: none; border-radius: 5px; padding: 5px 18px; color: $text_body;
 }
 #segment QPushButton:checked { background: $surface; color: $text; font-weight: bold; }
+#cardArrow { background: transparent; border: none; color: $accent; font-size: $fs_heading; font-weight: bold; padding: 0 6px; }
+#cardArrow:hover { color: $accent_hover; }
 #nav QPushButton { background: transparent; border: none; font-size: $fs_icon; color: $accent; padding: 0 10px; }
 #nav QPushButton:disabled { color: $disabled; }
 #navTitle { font-size: $fs_body; font-weight: bold; min-width: 80px; }
@@ -272,13 +278,8 @@ def _bucket_caption(bucket) -> str:
 
 
 def activity_summary(day) -> str:
-    """하루 줄 오른쪽 둘째 줄: "휴식 18회 · 운동 2회 · 건너뜀 3회". 건너뜀·미룸은 있을 때만."""
-    parts = [f"휴식 {day.rests}회", f"운동 {day.exercises}회"]
-    if day.skipped:
-        parts.append(f"건너뜀 {day.skipped}회")
-    if day.snoozed:
-        parts.append(f"미룸 {day.snoozed}회")
-    return " · ".join(parts)
+    """하루 줄 오른쪽 둘째 줄: "휴식 18회 · 운동 2회". 건너뜀·미룸은 칸에 마우스를 올렸을 때만 보인다."""
+    return f"휴식 {day.rests}회 · 운동 {day.exercises}회"
 
 
 class TimelineChart(QWidget):
@@ -426,7 +427,7 @@ class TimelineChart(QWidget):
                 painter.drawText(info, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, "기록 없음")
                 continue
             has_usage = day.total_seconds >= 60
-            first = f"{day.span} · {format_usage(day.total_seconds)}" if has_usage else "스크린 타임 기록 없음"
+            first = format_usage(day.total_seconds) if has_usage else "스크린 타임 기록 없음"
             painter.setPen(theme.color("text_body") if has_usage else theme.color("text_faint"))
             painter.drawText(
                 QRectF(info.left(), top + 2, info.width(), 16), Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, first
@@ -457,7 +458,7 @@ class RecordsTab(QWidget):
         self._now = now
         self._tz = tz
         self._mode = Mode.REST
-        self._period = Period.WEEK
+        self._period = Period.DAY
         self._anchor = self._today()
         self._selected = -1
         self._expanded = False  # 최근 기록을 펼쳤는지
@@ -526,11 +527,13 @@ class RecordsTab(QWidget):
         # 하이라이트 카드 세 개 (오른쪽에 세로로)
         side = QVBoxLayout()
         side.setSpacing(12)
+        self._highlight_cards: list[QFrame] = []
         self._highlight_labels: list[QLabel] = []
         self._highlight_values: list[QLabel] = []
         self._highlight_details: list[QLabel] = []
         self._highlight_compares: list[QLabel] = []
-        for _ in range(3):
+        self._skip_kind = EVENT_SKIPPED  # 두 번째 카드가 보여 주는 것: 건너뜀 또는 미룸
+        for index in range(3):
             card = _card()
             card.setMinimumWidth(210)
             layout = QVBoxLayout(card)
@@ -542,16 +545,41 @@ class RecordsTab(QWidget):
             detail.setObjectName("cardDetail")
             compare.setObjectName("cardCompare")  # 앞 기간과의 비교
             compare.setWordWrap(True)
-            layout.addWidget(label)
+            if index == 1:  # 눈 휴식 화면의 둘째 카드: 이름(건너뜀/미룸) 양옆의 < > 로 건너뜀과 미룸을 오간다
+                self._skip_prev, self._skip_next = QPushButton("‹"), QPushButton("›")
+                for button, step in ((self._skip_prev, -1), (self._skip_next, 1)):
+                    button.setObjectName("cardArrow")
+                    button.setCursor(Qt.CursorShape.PointingHandCursor)
+                    button.setFlat(True)
+                    button.clicked.connect(lambda _checked=False, n=step: self._step_skip_kind(n))
+                head = QHBoxLayout()
+                head.setContentsMargins(0, 0, 0, 0)
+                head.setSpacing(2)
+                head.addWidget(self._skip_prev)
+                head.addWidget(label)
+                head.addWidget(self._skip_next)
+                head.addStretch()
+                layout.addLayout(head)
+            else:
+                layout.addWidget(label)
             layout.addWidget(value)
+            if index == 0:  # 눈 휴식 화면의 첫 카드(휴식 달성률)는 홈 화면과 같은 원형 게이지를 쓴다
+                self._rate_gauge = RingGauge(min_size=96)
+                self._rate_gauge.hide()
+                layout.addWidget(self._rate_gauge, alignment=Qt.AlignmentFlag.AlignLeft)
             layout.addWidget(detail)
             layout.addWidget(compare)
             layout.addStretch()
             side.addWidget(card, stretch=1)
+            self._highlight_cards.append(card)
             self._highlight_labels.append(label)
             self._highlight_values.append(value)
             self._highlight_details.append(detail)
             self._highlight_compares.append(compare)
+        self._side = side
+        side.addStretch(0)  # 카드가 두 개일 때(스크린 타임) 카드를 위로 붙이고 남는 자리를 차지한다
+        self._skip_prev.hide()
+        self._skip_next.hide()
 
         # 오늘 요약: 어제 하루와 비교해서 보여 준다 (보는 기간과 상관없이 항상 보인다)
         today_widget = QWidget()  # 창이 커져도 가장 큰 카드의 높이까지만 차지하고, 세 카드는 같은 높이로 맞춘다
@@ -657,12 +685,9 @@ class RecordsTab(QWidget):
 
     @staticmethod
     def _legend_html() -> list[str]:
-        """하루 흐름 범례: 칸 색(스크린 타임)과 칸 안의 숫자(눈 운동 횟수). 휴식·건너뜀·미룸은 줄 오른쪽에 적혀 있다."""
+        """하루 흐름 범례 한 줄: 칸 색은 스크린 타임, 칸 안의 숫자는 눈 운동 횟수. 휴식은 줄 오른쪽에 적혀 있다."""
         accent = theme.palette().accent
-        return [
-            f'<span style="color:{accent};">▬</span> 스크린 타임 (진할수록 오래)',
-            "<b>2</b> 마친 눈 운동 횟수",
-        ]
+        return [f'<span style="color:{accent};">■</span> 스크린 타임 · 숫자는 눈 운동 횟수']
 
     # ---- 상태 ----
 
@@ -703,6 +728,12 @@ class RecordsTab(QWidget):
 
     def _on_selection(self, index: int) -> None:
         self._selected = index
+        self.refresh()
+
+    def _step_skip_kind(self, step: int) -> None:
+        """둘째 카드가 보여 주는 것을 건너뜀 ↔ 미룸으로 바꾼다. 둘뿐이라 < > 어느 쪽이든 반대쪽으로 간다."""
+        kinds = list(SKIP_KINDS)
+        self._skip_kind = kinds[(kinds.index(self._skip_kind) + step) % len(kinds)]
         self.refresh()
 
     def _toggle_expanded(self) -> None:
@@ -789,7 +820,16 @@ class RecordsTab(QWidget):
             self._caption.setText(range_caption(self._period, self._anchor))
         self._chart.set_data(buckets, selected)
         self._set_compare(None if selected >= 0 else compare_exercise_period(self._period, self._anchor, scoped, now, self._tz))
-        self._set_highlights(highlights_with_compare(self._period, summary, previous, label))
+        interval = self._interval_minutes()
+        usage = self._usage()
+        rest = rest_stats(self._period, self._anchor, usage, scoped, now, self._tz, interval)
+        slots = rest_slot_count(self._period, self._anchor, scoped, self._tz)
+        previous_anchor = shift_anchor(self._period, self._anchor, -1)
+        previous_slots = rest_slot_count(self._period, previous_anchor, scoped, self._tz)
+        self._set_highlights(
+            rest_highlights_with_compare(self._period, summary, previous, label, rest, slots, previous_slots, self._skip_kind)
+        )
+        self._show_rest_cards(rest.rate)
 
         self._draw_timeline(all_events, self._usage(), now)
 
@@ -828,19 +868,35 @@ class RecordsTab(QWidget):
         stats = rest_stats(self._period, self._anchor, usage, rest_events, now, self._tz, interval)
         previous_stats = rest_stats(self._period, previous_anchor, usage, rest_events, now, self._tz, interval)
         self._set_highlights(usage_highlights_with_compare(self._period, usage_summary, stats, previous_usage, previous_stats, label))
+        self._show_rest_cards(None, False)
 
         self._draw_timeline(all_events, usage, now)
 
+    def _show_rest_cards(self, rate: float | None, rest_mode: bool = True) -> None:
+        """눈 휴식 화면에서만: 첫 카드는 숫자 대신 원형 게이지(가운데에 같은 퍼센트가 있다), 둘째 카드는 이름 양옆에 < > 화살표."""
+        self._rate_gauge.set_rate(rate)
+        self._rate_gauge.setVisible(rest_mode)
+        self._highlight_values[0].setVisible(not rest_mode)
+        self._skip_prev.setVisible(rest_mode)
+        self._skip_next.setVisible(rest_mode)
+
     def _set_highlights(self, cards) -> None:
-        for label, value, detail, compare, card in zip(
-            self._highlight_labels, self._highlight_values, self._highlight_details, self._highlight_compares, cards, strict=True
-        ):
-            label.setText(card.label)
-            value.setText(card.value)
-            detail.setText(card.detail)
-            detail.setVisible(bool(card.detail))
-            compare.setText(arrow_line(card.trend, card.compare) if card.compare else "")
-            compare.setVisible(bool(card.compare))
+        """카드 내용을 채운다. 카드가 세 개보다 적으면(스크린 타임은 두 개) 남는 카드는 비우고 숨기고,
+        남은 카드는 내용만큼만 차지해서 위로 붙인다(세 개일 때는 차트 높이에 맞춰 늘어난다)."""
+        compact = len(cards) < len(self._highlight_cards)
+        for index in range(len(self._highlight_cards)):
+            self._side.setStretch(index, 0 if compact else 1)
+        self._side.setStretch(len(self._highlight_cards), 1 if compact else 0)
+        blank = Highlight("", "")
+        for index, card_widget in enumerate(self._highlight_cards):
+            card = cards[index] if index < len(cards) else blank
+            card_widget.setVisible(index < len(cards))
+            self._highlight_labels[index].setText(card.label)
+            self._highlight_values[index].setText(card.value)
+            self._highlight_details[index].setText(card.detail)
+            self._highlight_details[index].setVisible(bool(card.detail))
+            self._highlight_compares[index].setText(arrow_line(card.trend, card.compare) if card.compare else "")
+            self._highlight_compares[index].setVisible(bool(card.compare))
 
     def _set_number(self, count: int) -> None:
         self._set_number_parts([(str(count), "회")])

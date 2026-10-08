@@ -55,6 +55,11 @@ class Controller(QObject):
     def remaining_seconds(self) -> float | None:
         return self._scheduler.remaining_seconds
 
+    @property
+    def target_seconds(self) -> float | None:
+        """지금 세고 있는 카운트다운의 전체 길이. 홈 화면의 진행 바가 쓴다."""
+        return self._scheduler.target_seconds
+
     def start(self) -> None:
         self._timer.start()
 

@@ -24,6 +24,23 @@ def format_clock(seconds: float) -> str:
     return f"{minutes}:{secs:02d}" if minutes < 10 else f"{minutes:02d}:{secs:02d}"
 
 
+def home_timer(state: State, remaining: float | None, activity: str | None = None) -> tuple[str, str]:
+    """홈 화면 타이머 카드의 (위 작은 글씨, 큰 글씨).
+
+    기다리는 중이면 ('다음 눈 휴식까지', '12:34'), 미루는 중이면 ('다시 알림까지', '4:50'),
+    일시정지면 ('일시정지됨', '12:34'), 알림이 떠 있으면 ('눈 휴식 시간', '지금'), 하는 중이면 ('눈 휴식 중', '–')."""
+    clock = format_clock(remaining) if remaining is not None else "–"
+    if state is State.DUE:
+        return "눈 휴식 시간", "지금"
+    if state is State.EXERCISING:
+        return ("눈 운동 중" if activity == ACTIVITY_EXERCISE else "눈 휴식 중"), "–"
+    if state is State.PAUSED:
+        return "일시정지됨", clock
+    if state is State.SNOOZED:
+        return "다시 알림까지", clock
+    return "다음 눈 휴식까지", clock
+
+
 def timer_pill(state: State, remaining: float | None, activity: str | None = None) -> tuple[str, str]:
     """사이드바 타이머 알약의 (문구, 상태). 상태는 normal / alert / paused / active.
 

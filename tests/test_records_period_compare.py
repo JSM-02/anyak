@@ -38,6 +38,7 @@ def usage_of(entries):
 def make_tab(qapp, events=(), entries=()):
     state = {"events": list(events), "usage": usage_of(entries)}
     tab = RecordsTab(lambda: state["events"], now=lambda: NOW, tz=KST, usage_provider=lambda: state["usage"])
+    tab.set_period(Period.WEEK)  # 앱의 처음 화면은 일 보기이지만 이 테스트는 주 보기 기준이다
     tab.resize(1000, 900)
     tab.show()
     qapp.processEvents()

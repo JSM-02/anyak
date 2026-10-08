@@ -49,6 +49,21 @@ def test_처음에는_RUNNING이고_남은_시간은_interval(env):
     assert env.sched.remaining_seconds == 1200
 
 
+def test_세고_있는_카운트다운의_전체_길이를_알려_준다(env):
+    assert env.sched.target_seconds == 1200  # 휴식 주기
+    env.active(1200)
+    assert env.sched.state is State.DUE and env.sched.target_seconds is None  # 알림 중에는 세지 않는다
+    env.sched.snooze()
+    assert env.sched.target_seconds == 300  # 미루기 시간
+    env.sched.pause()
+    assert env.sched.target_seconds == 300  # 일시정지 중에는 멈추기 전 값
+    env.sched.resume()
+    env.sched.start_exercise()
+    assert env.sched.target_seconds is None
+    env.sched.finish_exercise()
+    assert env.sched.target_seconds == 1200
+
+
 def test_20분이_되면_DUE가_되고_이벤트가_한_번_나온다(env):
     env.active(1199)
     assert env.sched.state is State.RUNNING
