@@ -5,6 +5,17 @@ PC를 쓰는 동안 일정 간격으로 눈 운동을 알려 주는 Windows 트�
 
 > 개발 중인 테스트 버전입니다. Windows 11(64비트)에서 확인했고, 다른 Windows 버전에서는 아직 확인하지 못했습니다.
 
+## 화면
+![홈 화면](docs/images/home.png)
+
+| 기록 | 설정 | 시력 기록 |
+|---|---|---|
+| <img src="docs/images/records.png" alt="기록 화면" width="300"> | <img src="docs/images/settings.png" alt="설정 화면" width="300"> | <img src="docs/images/vision.png" alt="시력 기록 화면" width="300"> |
+
+| 알림 팝업 | 눈 깜빡임 | 점 따라가기 |
+|---|---|---|
+| <img src="docs/images/popup.png" alt="알림 팝업" width="300"> | <img src="docs/images/blink.png" alt="눈 깜빡임 운동 창" width="300"> | <img src="docs/images/exercise.png" alt="점 따라가기 운동 창" width="300"> |
+
 ## 기능
 - **주기 알림:** 기본 20분마다 눈 휴식을 알려 줍니다. 간격은 설정에서 바꿀 수 있습니다.
 - **눈 휴식:** 눈 깜빡임 운동과 먼 곳 바라보기를 안내합니다. 눈을 감고도 들을 수 있게 음성이나 알림음으로 알려 줍니다.
