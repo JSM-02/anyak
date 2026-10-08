@@ -41,9 +41,9 @@ CONFIRM_DELETE_TEXT = "정말 삭제"
 _STYLE = """
 #visionPage, #visionContent { background: $bg; }
 #visionPage QLabel { background: transparent; }
-#pageTitle { font-size: $fs_title; font-weight: bold; }
-#sectionTitle { font-size: $fs_heading; font-weight: bold; padding-top: 6px; }
-#card { background: $surface; border: 1px solid $border; border-radius: 8px; }
+#pageTitle { font-size: $fs_title; font-weight: 900; }
+#sectionTitle { font-size: $fs_heading; font-weight: 800; padding-top: 6px; }
+#card { background: $surface; border: 1px solid $border; border-radius: 18px; }
 #fieldLabel { font-size: $fs_small; color: $text_secondary; }
 #hint { font-size: $fs_caption; color: $text_secondary; }
 #formError { font-size: $fs_small; color: $danger; }
@@ -53,7 +53,7 @@ _STYLE = """
 }
 #visionPage QLineEdit:focus { border: 1px solid $accent; }
 #primaryButton {
-    background: $accent; color: $on_accent; border: none; border-radius: 6px; padding: 7px 18px; font-weight: bold;
+    background: $accent; color: $on_accent; border: none; border-radius: 10px; padding: 9px 22px; font-weight: 800;
 }
 #primaryButton:hover { background: $accent_hover; }
 #secondaryButton {
@@ -64,7 +64,7 @@ _STYLE = """
 #rowButton:hover { color: $accent_hover; text-decoration: underline; }
 #dangerButton { background: transparent; border: none; color: $danger; padding: 4px 8px; }
 #dangerButton:hover { text-decoration: underline; }
-#rowDate { font-size: $fs_body; font-weight: bold; }
+#rowDate { font-size: $fs_body; font-weight: 800; }
 #acuity { font-size: $fs_body; }
 #delta { font-size: $fs_caption; color: $text_secondary; }
 #delta[trend="up"] { color: $accent; }
@@ -157,7 +157,7 @@ class VisionPage(QWidget):
         form = QFrame()
         form.setObjectName("card")
         form_layout = QVBoxLayout(form)
-        form_layout.setContentsMargins(20, 16, 20, 16)
+        form_layout.setContentsMargins(24, 20, 24, 20)
         form_layout.setSpacing(12)
         form_layout.addLayout(fields)
         form_layout.addLayout(self._field("메모", self.memo_edit))
@@ -168,7 +168,7 @@ class VisionPage(QWidget):
         list_title = QLabel("검사 기록")
         list_title.setObjectName("sectionTitle")
         self._rows = QVBoxLayout()
-        self._rows.setContentsMargins(20, 4, 20, 4)
+        self._rows.setContentsMargins(24, 6, 24, 6)
         self._rows.setSpacing(0)
         list_card = QFrame()
         list_card.setObjectName("card")
@@ -179,7 +179,7 @@ class VisionPage(QWidget):
         content.setAttribute(Qt.WidgetAttribute.WA_StyledBackground)
         body = QVBoxLayout(content)
         body.setContentsMargins(28, 22, 28, 24)
-        body.setSpacing(10)
+        body.setSpacing(14)
         body.setSizeConstraint(QLayout.SizeConstraint.SetMinimumSize)  # 창이 작아지면 눌리지 않고 스크롤된다
         body.addWidget(title)
         body.addWidget(hint)

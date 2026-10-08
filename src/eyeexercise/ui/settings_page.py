@@ -54,10 +54,10 @@ DOT_STEP_SECONDS = 10  # 점 따라가기 시간 슬라이더의 한 칸
 _STYLE = """
 #settingsPage, #settingsContent { background: $bg; }
 #settingsPage QLabel { background: transparent; }
-#pageTitle { font-size: $fs_title; font-weight: bold; }
-#sectionTitle { font-size: $fs_heading; font-weight: bold; padding-top: 6px; }
+#pageTitle { font-size: $fs_title; font-weight: 900; }
+#sectionTitle { font-size: $fs_heading; font-weight: 800; padding-top: 6px; }
 #divider { background: $divider; }
-#card { background: $surface; border: 1px solid $border; border-radius: 8px; }
+#card { background: $surface; border: 1px solid $border; border-radius: 18px; }
 #rowTitle { font-size: $fs_body; }
 #rowHint { font-size: $fs_caption; color: $text_secondary; }
 #warning { font-size: $fs_small; color: $warning; }
@@ -75,7 +75,7 @@ def _card(rows: list[QWidget]) -> QFrame:
     frame = QFrame()
     frame.setObjectName("card")
     layout = QVBoxLayout(frame)
-    layout.setContentsMargins(20, 4, 20, 4)
+    layout.setContentsMargins(24, 6, 24, 6)
     layout.setSpacing(0)
     for i, row in enumerate(rows):
         if i:
@@ -117,7 +117,7 @@ class SettingsPage(QWidget):
         content.setAttribute(Qt.WidgetAttribute.WA_StyledBackground)
         body = QVBoxLayout(content)
         body.setContentsMargins(28, 22, 28, 24)
-        body.setSpacing(10)
+        body.setSpacing(14)
         body.setSizeConstraint(QLayout.SizeConstraint.SetMinimumSize)  # 창이 작아지면 눌리지 않고 스크롤된다
         body.addWidget(title)
         body.addWidget(self._status)

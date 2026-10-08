@@ -554,7 +554,7 @@ def test_창이_커져도_오늘_요약_카드는_내용만큼만_차지한다(q
     tab, _ = make_tab(qapp)
     tab.resize(1000, 1700)
     qapp.processEvents()
-    cards = [f for f in tab.findChildren(QFrame) if f.objectName() == "card"][:3]
+    cards = [f for f in tab.findChildren(QFrame) if f.objectName() in ("card", "heroCard")][:3]
     assert all(card.height() < 150 for card in cards)
 
 
@@ -564,7 +564,7 @@ def test_오늘_요약_세_카드는_높이가_같다(qapp):
     tab, _ = make_tab(qapp, [done(at(10, 7, 9)), done(at(10, 6, 9))])
     tab.resize(1000, 1700)
     qapp.processEvents()
-    cards = [f for f in tab.findChildren(QFrame) if f.objectName() == "card"][:3]
+    cards = [f for f in tab.findChildren(QFrame) if f.objectName() in ("card", "heroCard")][:3]
     assert len({card.height() for card in cards}) == 1
 
 

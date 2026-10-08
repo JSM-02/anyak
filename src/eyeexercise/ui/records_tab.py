@@ -78,10 +78,10 @@ _MODE_LABELS = ((Mode.REST, "눈 휴식"), (Mode.SCREEN_TIME, "스크린 타임"
 _STYLE = """
 #records, #recordsContent { background: $bg; }
 #records QLabel { background: transparent; }
-#pageTitle { font-size: $fs_title; font-weight: bold; }
-#segment { background: $hover; border-radius: 7px; }
+#pageTitle { font-size: $fs_title; font-weight: 900; }
+#segment { background: $hover; border-radius: 12px; }
 #segment QPushButton {
-    background: transparent; border: none; border-radius: 5px; padding: 5px 18px; color: $text_body;
+    background: transparent; border: none; border-radius: 9px; padding: 6px 20px; color: $text_body; font-weight: 700;
 }
 #segment QPushButton:checked { background: $surface; color: $text; font-weight: bold; }
 #cardArrow { background: transparent; border: none; color: $accent; font-size: $fs_heading; font-weight: bold; padding: 0 6px; }
@@ -89,21 +89,25 @@ _STYLE = """
 #nav QPushButton { background: transparent; border: none; font-size: $fs_icon; color: $accent; padding: 0 10px; }
 #nav QPushButton:disabled { color: $disabled; }
 #navTitle { font-size: $fs_body; font-weight: bold; min-width: 80px; }
-#card { background: $surface; border: 1px solid $border; border-radius: 8px; }
-#kicker { font-size: $fs_small; color: $text_secondary; font-weight: bold; }
+#card { background: $surface; border: 1px solid $border; border-radius: 18px; }
+#kicker { font-size: $fs_small; color: $text_secondary; font-weight: 800; }
 #caption { font-size: $fs_small; color: $text_secondary; }
-#cardLabel { font-size: $fs_caption; color: $text_secondary; }
-#cardValue { font-size: $fs_title; font-weight: bold; }
+#cardLabel { font-size: $fs_caption; color: $text_secondary; font-weight: 700; }
+#cardValue { font-size: $fs_title; font-weight: 900; }
 #cardDetail { font-size: $fs_caption; color: $text_secondary; }
 #cardCompare { font-size: $fs_caption; color: $text_body; padding-top: 4px; }
-#todayTitle { font-size: $fs_caption; color: $text_secondary; font-weight: bold; }
-#todayValue { font-size: $fs_stat; font-weight: bold; }
+#todayTitle { font-size: $fs_caption; color: $text_secondary; font-weight: 800; }
+#todayValue { font-size: $fs_stat; font-weight: 900; }
+#heroCard { background: $hero; border: none; border-radius: 18px; }
+#heroCard #todayTitle { color: $sand; }
+#heroCard #todayValue { color: #ffffff; }
+#heroCard #todayLine { color: $sidebar_text; }
 #todayLine { font-size: $fs_small; color: $text_body; }
 #todayLineSub { font-size: $fs_caption; color: $text_muted; }
 #compareLine { font-size: $fs_small; color: $text_body; }
 #compareLineSub { font-size: $fs_caption; color: $text_muted; }
 #legendItem { font-size: $fs_caption; color: $text_secondary; padding: 0 6px; }
-#sectionTitle { font-size: $fs_heading; font-weight: bold; }
+#sectionTitle { font-size: $fs_heading; font-weight: 800; }
 #moreButton { background: transparent; border: none; color: $accent; padding: 2px 6px; }
 #moreButton:hover { text-decoration: underline; }
 """
@@ -590,6 +594,8 @@ class RecordsTab(QWidget):
         self._today_cards: dict[str, list[QLabel]] = {}
         for key, title_text in (("rest", "오늘 눈 휴식"), ("exercise", "오늘 눈 운동"), ("screen", "오늘 스크린 타임")):
             card = _card()
+            if key == "rest":  # 가장 중요한 오늘의 눈 휴식은 짙은 초록 색 블록으로 눈에 띄게 한다
+                card.setObjectName("heroCard")
             layout = QVBoxLayout(card)
             layout.setContentsMargins(18, 12, 18, 12)
             layout.setSpacing(2)
@@ -633,7 +639,7 @@ class RecordsTab(QWidget):
         content.setAttribute(Qt.WidgetAttribute.WA_StyledBackground)
         body = QVBoxLayout(content)
         body.setContentsMargins(28, 22, 28, 24)
-        body.setSpacing(14)
+        body.setSpacing(16)
         # 내용이 창보다 길면 눌리지 않고 스크롤되게 한다 (이 설정이 없으면 스크롤 영역이 내용을 창 높이에 맞춰 찌그러뜨린다)
         body.setSizeConstraint(QLayout.SizeConstraint.SetMinimumSize)
 
