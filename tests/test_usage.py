@@ -305,6 +305,14 @@ def test_범위를_벗어난_값은_보정한다():
     assert hourly[0] == 0 and hourly[1] == 3600
 
 
+def test_아주_큰_수나_NaN_무한대도_보정한다():
+    huge = 10**400
+    data = {"days": {"2026-10-06": [huge, -huge, float("nan"), float("inf"), float("-inf")] + [0] * 19}}
+    hourly = usage_from_dict(data).hourly(DAY)
+    assert hourly[:5] == [3600, 0, 0, 3600, 0]
+    usage_to_dict(usage_from_dict(data))  # 저장용 변환도 예외가 없다
+
+
 def test_구조가_잘못되면_빈_기록():
     for bad in (None, {}, {"days": []}, [1, 2], "x"):
         assert usage_from_dict(bad).days == {}

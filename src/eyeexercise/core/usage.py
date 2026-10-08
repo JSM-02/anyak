@@ -24,13 +24,23 @@ MAX_TICK_GAP_SECONDS = 10.0  # 이보다 오래 건너뛴 구간(절전 등)은 
 FLUSH_INTERVAL_SECONDS = 60.0
 
 
+def _clamp_seconds(value: float) -> float:
+    """한 시간대의 초를 0~3600으로 보정한다. NaN은 0으로 본다.
+
+    파일에서 읽은 아주 큰 정수는 float로 바꾸면 OverflowError라서, 바꾸기 전에 범위부터 자른다.
+    """
+    if value != value:  # NaN
+        return 0.0
+    return float(max(0, min(HOUR_SECONDS, value)))
+
+
 class UsageLog:
     """날짜별·시간대별 사용 시간(초)."""
 
     def __init__(self, days: Mapping[date, Sequence[float]] | None = None) -> None:
         self._days: dict[date, list[float]] = {}
         for day, hours in (days or {}).items():
-            self._days[day] = [max(0.0, min(HOUR_SECONDS, float(v))) for v in hours]
+            self._days[day] = [_clamp_seconds(v) for v in hours]
 
     @property
     def days(self) -> dict[date, list[float]]:

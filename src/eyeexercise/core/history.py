@@ -139,8 +139,12 @@ def _event_from_dict(raw: Any) -> HistoryEvent | None:
         ts = datetime.fromisoformat(raw["ts"])
     except (KeyError, TypeError, ValueError):
         return None
+    try:
+        local = ts.astimezone()
+    except (OSError, OverflowError, ValueError):
+        return None  # 윈도우가 로컬 시각으로 바꿀 수 있는 범위(대략 1970~3000년대)를 벗어난다
     if ts.tzinfo is None:
-        ts = ts.astimezone()  # 시간대가 없으면 로컬 시각으로 본다
+        ts = local  # 시간대가 없으면 로컬 시각으로 본다
     exercise = raw.get("exercise")
     if not isinstance(exercise, str):
         exercise = None

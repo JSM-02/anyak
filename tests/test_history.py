@@ -113,6 +113,23 @@ def test_잘못된_이벤트는_건너뛰고_나머지는_살린다():
     assert events[1].exercise is None and events[1].duration_seconds is None
 
 
+def test_로컬_시각으로_바꿀_수_없는_범위_밖_시각은_그_이벤트만_건너뛴다():
+    # 시간대 없는 시각(로컬로 해석)과 있는 시각 모두, 윈도우가 지원하는 범위를 벗어나면 변환에서 예외가 난다.
+    data = {
+        "events": [
+            {"ts": "0001-01-01T00:00:00", "type": "skipped"},
+            {"ts": "9999-12-31T23:59:59", "type": "skipped"},
+            {"ts": "1969-12-31T00:00:00", "type": "skipped"},
+            {"ts": "0001-01-01T00:00:00+00:00", "type": "skipped"},
+            {"ts": "9999-12-31T23:59:59-12:00", "type": "skipped"},
+            {"ts": "2026-10-06T15:00:00+09:00", "type": "completed"},
+        ]
+    }
+    events = history_from_dict(data)
+    assert [e.type for e in events] == ["completed"]
+    summarize_by_day(events)  # 남은 이벤트로 하루 집계를 해도 예외가 없다
+
+
 def test_events가_없거나_잘못된_구조면_빈_목록():
     assert history_from_dict(None) == []
     assert history_from_dict({}) == []
