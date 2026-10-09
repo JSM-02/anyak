@@ -21,15 +21,14 @@ def test_중첩된_경로도_바꾼다():
     s = with_changes(
         Settings(),
         {
-            "exercises.blink.enabled": False,
-            "exercises.blink.duration_seconds": 90,
+            "exercises.dot_follow.enabled": False,
             "exercises.dot_follow.speed": "fast",
             "exercises.dot_follow.duration_seconds": 90,
             "sound.enabled": False,
             "show_main_window_on_start": True,
         },
     )
-    assert s.exercises.blink.enabled is False and s.exercises.blink.duration_seconds == 90
+    assert s.exercises.dot_follow.enabled is False
     assert s.exercises.dot_follow.speed == "fast" and s.exercises.dot_follow.duration_seconds == 90
     assert s.sound.enabled is False and s.show_main_window_on_start is True
 
@@ -37,7 +36,7 @@ def test_중첩된_경로도_바꾼다():
 def test_범위를_벗어난_값은_파일을_읽을_때와_같이_보정한다():
     assert with_changes(Settings(), {"interval_minutes": 0}).interval_minutes == 1
     assert with_changes(Settings(), {"interval_minutes": 999}).interval_minutes == 120
-    assert with_changes(Settings(), {"exercises.blink.duration_seconds": 1}).exercises.blink.duration_seconds == 12
+    assert with_changes(Settings(), {"exercises.dot_follow.duration_seconds": 1}).exercises.dot_follow.duration_seconds == 10
 
 
 def test_잘못된_타입과_속도는_기본값으로_보정한다():
@@ -60,7 +59,7 @@ def test_여러_값을_한_번에_바꿔도_보정은_전체에_적용된다():
     assert (s.idle_pause_minutes, s.idle_reset_minutes) == (10, 30)  # 둘 다 바꾸면 보정할 필요가 없다
 
 
-@pytest.mark.parametrize("path", ["unknown", "exercises.unknown", "exercises.blink.unknown", "sound.enabled.deeper", "version", "exercises.blink"])
+@pytest.mark.parametrize("path", ["unknown", "exercises.unknown", "exercises.dot_follow.unknown", "sound.enabled.deeper", "version", "exercises.dot_follow", "exercises.blink.enabled"])
 def test_없는_경로나_version은_거부한다(path):
     with pytest.raises(KeyError):
         with_changes(Settings(), {path: 1})
@@ -168,7 +167,7 @@ def test_저장_콜백이_없어도_동작한다():
 def test_파일에_저장하고_다시_읽는다(tmp_path):
     path = tmp_path / "settings.json"
     manager = SettingsManager(Settings(), save=lambda s: json_store.save_settings(path, s))
-    manager.update({"interval_minutes": 33, "exercises.blink.duration_seconds": 90, "sound.enabled": False})
+    manager.update({"interval_minutes": 33, "exercises.dot_follow.duration_seconds": 90, "sound.enabled": False})
     loaded = json_store.load_settings(path)
     assert loaded == manager.settings
     assert loaded.interval_minutes == 33 and loaded.sound.enabled is False
@@ -213,13 +212,13 @@ def test_초기화_저장에_실패해도_이번_실행에는_적용한다():
 
 
 def test_초기화하면_정해_둔_기본값으로_돌아간다():
-    from eyeexercise.core.exercises import blink_cycles_for_seconds, current_preset
+    from eyeexercise.core.exercises import current_preset
 
     manager = SettingsManager(Settings())
     manager.update(
         {
             "interval_minutes": 45, "exercises.daily_goal": 5, "show_main_window_on_start": False,
-            "exercises.blink.duration_seconds": 96, "exercises.dot_follow.duration_seconds": 120,
+            "exercises.dot_follow.duration_seconds": 120,
             "exercises.dot_follow.speed": "fast", "snooze_minutes": 15, "idle_pause_minutes": 10, "idle_reset_minutes": 30,
         }
     )
@@ -228,7 +227,6 @@ def test_초기화하면_정해_둔_기본값으로_돌아간다():
     assert s.exercises.daily_goal == 2  # 하루 운동 목표
     assert current_preset(s.exercises) == "normal"  # 길이는 보통
     assert s.show_main_window_on_start is True  # 시작할 때 화면 보이기
-    assert blink_cycles_for_seconds(s.exercises.blink.duration_seconds) == 5  # 깜빡임 5회
     assert s.exercises.dot_follow.duration_seconds == 60  # 운동 시간 1분
     assert s.exercises.dot_follow.speed == "normal"  # 점 따라가기 속도 보통
     assert (s.snooze_minutes, s.idle_pause_minutes, s.idle_reset_minutes) == (5, 1, 5)  # 미루기·알림 멈춤·처음부터

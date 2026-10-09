@@ -9,7 +9,7 @@ from PySide6.QtWidgets import QApplication, QSystemTrayIcon
 
 from eyeexercise import APP_NAME
 from eyeexercise.core.clock import SystemClock
-from eyeexercise.core.exercises import LookAwayTimeline, exercise_timeline, rest_timeline
+from eyeexercise.core.exercises import LookAwayTimeline, exercise_timeline
 from eyeexercise.core.history import ACTIVITY_EXERCISE, History
 from eyeexercise.core.autostart import AutoStart
 from eyeexercise.core.offer import exercises_done_today, should_offer_exercise
@@ -143,8 +143,8 @@ class TrayApp:
 
     def _on_state_changed(self, state: State) -> None:
         # 버튼이든 트레이 메뉴든, 알림 상태를 벗어나면 팝업을 닫는다.
-        # 다만 팝업의 [시작]으로 시작한 휴식이 팝업 안의 20초 카운트다운이면 팝업을 닫지 않고 그 자리에서 바꾼다(깜빡이지 않게).
-        if state is State.EXERCISING and self._rest_from_popup and isinstance(rest_timeline(self._settings.exercises), LookAwayTimeline):
+        # 다만 팝업의 [시작]으로 시작한 휴식은 팝업을 닫지 않고 그 자리에서 20초 카운트다운으로 바꾼다(깜빡이지 않게).
+        if state is State.EXERCISING and self._rest_from_popup:
             return
         if state is not State.DUE:
             self.popup.hide()
@@ -160,14 +160,13 @@ class TrayApp:
         self.popup.show_at_corner()
 
     def _on_activity_started(self, activity: str) -> None:
-        exercises = self._settings.exercises
-        timeline = exercise_timeline(exercises) if activity == ACTIVITY_EXERCISE else rest_timeline(exercises)
+        if activity != ACTIVITY_EXERCISE:
+            self.popup.start_countdown(LookAwayTimeline())  # 눈 휴식: 창 없이 팝업 안에서 20초 먼 곳 바라보기
+            return
+        timeline = exercise_timeline(self._settings.exercises)
         if timeline is None:
             self.tray.show_message("점 따라가기가 꺼져 있어요. 설정에서 켜 주세요.")
             self.controller.abort_exercise()
-            return
-        if isinstance(timeline, LookAwayTimeline):
-            self.popup.start_countdown(timeline)  # 깜빡임이 꺼져 있으면 창 없이 팝업 안에서 20초 먼 곳 바라보기
             return
         self.exercise_window.start(timeline)
 

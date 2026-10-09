@@ -2,12 +2,11 @@
 
 화면은 `step_at(경과 초)`가 돌려주는 값을 그리기만 한다.
 
-- **눈 휴식**(`rest_timeline`): 20분마다. 깜빡임(`blink_timeline`)이 끝나면 곧바로 먼 곳 바라보기(20초 카운트다운)가
-  이어진다. 깜빡임을 끄면 먼 곳 바라보기만 한다(`LookAwayTimeline`).
-- **눈 운동**(`exercise_timeline`): 하루 1~2회. 점 따라가기(`dot_follow_timeline`)만 한다. 끝나면 바로 닫히고 먼 곳 바라보기는 이어지지 않는다.
+- **눈 휴식**(`LookAwayTimeline`): 20분마다. 알림 팝업 안에서 먼 곳을 20초 바라본다(카운트다운). 20초가 지나야 `done`이다.
+- **눈 운동**(`exercise_timeline`): 하루 1~2회. 점 따라가기(`dot_follow_timeline`)만 한다. 준비 → 점 따라가기 → 마무리가 끝나는
+  `total_seconds`에서 곧바로 `finished`와 `done`이 된다(먼 곳 바라보기는 이어지지 않는다).
 
-깜빡임 휴식의 타임라인은 본 활동(준비 → 본 활동 → 마무리, 총 `total_seconds`) 뒤에 먼 곳 바라보기가 오고 그것까지 끝나면 `done`이 된다.
-점 따라가기는 마무리가 끝나는 `total_seconds`에서 곧바로 `finished`와 `done`이 된다.
+(예전에 있던 눈 깜빡임 운동은 없앴다. 저장된 기록에서 휴식을 가리키는 이름 `"blink"`는 이미 쌓인 기록이 이어지도록 그대로 쓴다.)
 """
 
 import math
@@ -18,30 +17,16 @@ from typing import ClassVar
 
 from eyeexercise.core.settings import ExercisesSettings
 
-EXERCISE_BLINK = "blink"
+EXERCISE_REST = "blink"  # 저장된 기록에서 눈 휴식을 가리키는 이름. 예전 깜빡임 운동의 이름을 그대로 써서 기록이 이어진다
 EXERCISE_DOT_FOLLOW = "dot_follow"
 
 PREPARE_SECONDS = 3
 FINISH_SECONDS = 3
 LOOK_AWAY_SECONDS = 20  # 휴식에서 먼 곳을 바라보는 시간 (20-20-20 규칙)
 
-# 깜빡임 운동 구성(초). 준비 → (감기 → 유지 → 뜨기 → 쉬기) 반복 → 마무리
-# 심호흡처럼 천천히: 눈을 천천히 감고(2초) 잠시 머문 뒤(1초) 천천히 뜨고(2초) 숨을 돌린다(1초).
-# 낮은 종(감기 시작)과 높은 종(뜨기 시작) 사이는 3초이고, 한 사이클은 6초다.
-CLOSE_SECONDS = 2
-HOLD_SECONDS = 1
-OPEN_SECONDS = 2
-REST_SECONDS = 1
-CYCLE_SECONDS = CLOSE_SECONDS + HOLD_SECONDS + OPEN_SECONDS + REST_SECONDS
-MIN_BLINK_SECONDS = PREPARE_SECONDS + CYCLE_SECONDS + FINISH_SECONDS  # 사이클 1회
-
 
 class Phase(Enum):
     PREPARE = "prepare"
-    CLOSE = "close"
-    HOLD = "hold"
-    OPEN = "open"
-    REST = "rest"
     TRACK = "track"  # 점 따라가기: 점을 눈으로 따라가는 중
     FINISH = "finish"
     LOOK_AWAY = "look_away"
@@ -49,22 +34,14 @@ class Phase(Enum):
 
 MESSAGES = {
     Phase.PREPARE: "편안하게 앉아 화면을 바라보세요",
-    Phase.CLOSE: "천천히 눈을 감으세요",
-    Phase.HOLD: "감은 채 잠시 머무세요",
-    Phase.OPEN: "천천히 부드럽게 뜨세요",
-    Phase.REST: "",  # 쉬는 동안에는 아무 문구도 보이지 않는다
     Phase.TRACK: "",  # 점 따라가기의 문구는 패턴마다 다르다 (DotPattern.message)
     Phase.FINISH: "잘했어요",
     Phase.LOOK_AWAY: "먼 곳을 바라보세요",
 }
 
-# 눈을 감고 있어도 들을 수 있는 짧은 음성 안내. None이면 말하지 않는다.
+# 소리로 하는 짧은 음성 안내. None이면 말하지 않는다.
 SPOKEN = {
     Phase.PREPARE: "준비하세요",
-    Phase.CLOSE: "눈을 감으세요",
-    Phase.HOLD: None,
-    Phase.OPEN: "눈을 뜨세요",
-    Phase.REST: None,
     Phase.TRACK: None,  # 눈을 뜨고 점을 보는 운동이라 소리 없이 진행한다
     Phase.FINISH: "잘했어요",
     Phase.LOOK_AWAY: "이제 먼 곳을 바라보세요",
@@ -75,73 +52,20 @@ SPOKEN = {
 class ExerciseStep:
     phase: Phase
     message: str
-    eye_openness: float | None  # 깜빡임: 1.0 = 활짝 뜸, 0.0 = 완전히 감음 (애니메이션용). 점 따라가기는 None
-    progress: float  # 진행 막대. 운동 동안 0→1로 차오르고, 먼 곳 바라보기 동안 1→0으로 줄어든다
+    progress: float  # 진행. 운동 동안 0→1로 차오르고, 먼 곳 바라보기 동안 1→0으로 줄어든다
     finished: bool  # 운동이 끝났다 (기록을 남길 시점)
     countdown: int | None = None  # 먼 곳 바라보기의 남은 초 (20→1). 그 외에는 None
-    done: bool = False  # 먼 곳 바라보기까지 모두 끝났다 (창을 닫을 시점)
+    done: bool = False  # 모두 끝났다 (창을 닫을 시점)
     dot: tuple[float, float] | None = None  # 점 따라가기: 점의 위치 (0~1 정규화 좌표). 그 외에는 None
     pattern: int | None = None  # 점 따라가기: 지금 따라가는 경로의 번호(DOT_PATTERNS의 순서). 점을 따라가는 중이 아니면 None
 
 
-def _look_away_step(t: float, eye_openness: float | None) -> ExerciseStep:
+def _look_away_step(t: float) -> ExerciseStep:
     message = MESSAGES[Phase.LOOK_AWAY]
     if t >= LOOK_AWAY_SECONDS:
-        return ExerciseStep(Phase.LOOK_AWAY, message, eye_openness, 0.0, True, 0, True)
+        return ExerciseStep(Phase.LOOK_AWAY, message, 0.0, True, 0, True)
     countdown = math.ceil(LOOK_AWAY_SECONDS - t)
-    return ExerciseStep(Phase.LOOK_AWAY, message, eye_openness, 1.0 - t / LOOK_AWAY_SECONDS, True, countdown)
-
-
-# ---- 깜빡임 운동 ----
-
-
-@dataclass(frozen=True)
-class BlinkTimeline:
-    exercise: ClassVar[str] = EXERCISE_BLINK
-    total_seconds: int
-    cycles: int
-
-    def step_at(self, elapsed: float) -> ExerciseStep:
-        total = float(self.total_seconds)
-        elapsed = max(0.0, elapsed)
-        progress = min(1.0, elapsed / total)
-        if elapsed >= total:
-            return _look_away_step(elapsed - total, 1.0)
-        if elapsed < PREPARE_SECONDS:
-            return self._step(Phase.PREPARE, 1.0, progress)
-
-        finish_start = total - FINISH_SECONDS
-        if elapsed >= finish_start:
-            return self._step(Phase.FINISH, 1.0, progress)
-
-        # 남는 시간은 마지막 '쉬기'에 붙는다. 그래서 마지막 사이클만 길 수 있다.
-        t = elapsed - PREPARE_SECONDS
-        index = min(int(t // CYCLE_SECONDS), self.cycles - 1)
-        t -= index * CYCLE_SECONDS
-        if t < CLOSE_SECONDS:
-            return self._step(Phase.CLOSE, 1.0 - t / CLOSE_SECONDS, progress)
-        t -= CLOSE_SECONDS
-        if t < HOLD_SECONDS:
-            return self._step(Phase.HOLD, 0.0, progress)
-        t -= HOLD_SECONDS
-        if t < OPEN_SECONDS:
-            return self._step(Phase.OPEN, t / OPEN_SECONDS, progress)
-        return self._step(Phase.REST, 1.0, progress)
-
-    @staticmethod
-    def _step(phase: Phase, openness: float, progress: float) -> ExerciseStep:
-        return ExerciseStep(phase, MESSAGES[phase], openness, progress, False)
-
-
-def blink_timeline(duration_seconds: int) -> BlinkTimeline:
-    """설정된 총 시간으로 타임라인을 만든다.
-
-    사이클 수는 (총 시간 - 준비 - 마무리) // 6초이고 최소 1회다. 남는 시간은 마지막 '쉬기'가 흡수한다.
-    그래서 총 시간이 사이클 1회(12초)보다 짧게 설정돼도 12초 아래로는 줄지 않는다.
-    """
-    total = max(int(duration_seconds), MIN_BLINK_SECONDS)
-    cycles = max(1, (total - PREPARE_SECONDS - FINISH_SECONDS) // CYCLE_SECONDS)
-    return BlinkTimeline(total_seconds=total, cycles=cycles)
+    return ExerciseStep(Phase.LOOK_AWAY, message, 1.0 - t / LOOK_AWAY_SECONDS, True, countdown)
 
 
 # ---- 점 따라가기 ----
@@ -241,14 +165,14 @@ class DotFollowTimeline:
         elapsed = max(0.0, elapsed)
         progress = min(1.0, elapsed / total)
         if elapsed >= total:  # 점 따라가기 뒤에는 먼 곳 바라보기를 하지 않는다. 마무리가 끝나면 바로 끝난다
-            return ExerciseStep(Phase.FINISH, MESSAGES[Phase.FINISH], None, 1.0, True, done=True, dot=DOT_CENTER)
+            return ExerciseStep(Phase.FINISH, MESSAGES[Phase.FINISH], 1.0, True, done=True, dot=DOT_CENTER)
         if elapsed < PREPARE_SECONDS:
-            return ExerciseStep(Phase.PREPARE, DOT_PREPARE_MESSAGE, None, progress, False, dot=DOT_CENTER)
+            return ExerciseStep(Phase.PREPARE, DOT_PREPARE_MESSAGE, progress, False, dot=DOT_CENTER)
         if elapsed >= self._body_end:
             # 마지막 패턴이 끝난 자리에서 가운데로 부드럽게 돌아온다
             w = _smoothstep((elapsed - self._body_end) / DOT_TRANSITION_SECONDS)
             dot = _lerp(self._segment_end(self.segments - 1), DOT_CENTER, w)
-            return ExerciseStep(Phase.FINISH, MESSAGES[Phase.FINISH], None, progress, False, dot=dot)
+            return ExerciseStep(Phase.FINISH, MESSAGES[Phase.FINISH], progress, False, dot=dot)
 
         seg = self._segment_seconds
         body_t = elapsed - PREPARE_SECONDS
@@ -258,7 +182,7 @@ class DotFollowTimeline:
         start = DOT_CENTER if index == 0 else self._segment_end(index - 1)
         dot = _lerp(start, self._raw(index, t), _smoothstep(t / DOT_TRANSITION_SECONDS))
         return ExerciseStep(
-            Phase.TRACK, self.pattern_at(index).message, None, progress, False, dot=dot, pattern=index % len(DOT_PATTERNS)
+            Phase.TRACK, self.pattern_at(index).message, progress, False, dot=dot, pattern=index % len(DOT_PATTERNS)
         )
 
 
@@ -274,28 +198,21 @@ def dot_follow_timeline(duration_seconds: int, speed: str = "normal") -> DotFoll
     return DotFollowTimeline(total_seconds=total, speed_hz=DOT_SPEED_HZ.get(speed, DOT_SPEED_HZ["normal"]), segments=segments)
 
 
-# ---- 먼 곳 바라보기만 하는 휴식 ----
+# ---- 눈 휴식: 먼 곳 바라보기 20초 ----
 
 
 @dataclass(frozen=True)
 class LookAwayTimeline:
-    """깜빡임 없이 먼 곳 바라보기(20초)만 하는 휴식. 본 활동의 길이가 0초다."""
+    """눈 휴식. 알림 팝업 안에서 먼 곳을 20초 바라본다. 본 활동의 길이가 0초이고 20초가 지나야 `done`이다."""
 
-    exercise: ClassVar[str] = EXERCISE_BLINK  # 기록은 깜빡임과 같은 '휴식'으로 남는다
+    exercise: ClassVar[str] = EXERCISE_REST  # 기록은 '휴식'으로 남는다
     total_seconds: int = 0
 
     def step_at(self, elapsed: float) -> ExerciseStep:
-        return _look_away_step(max(0.0, elapsed), None)
+        return _look_away_step(max(0.0, elapsed))
 
 
-# ---- 휴식·운동 선택 ----
-
-
-def rest_timeline(settings: ExercisesSettings) -> BlinkTimeline | LookAwayTimeline:
-    """눈 휴식의 타임라인. 깜빡임이 켜져 있으면 깜빡임 + 먼 곳 바라보기, 꺼져 있으면 먼 곳 바라보기만."""
-    if settings.blink.enabled:
-        return blink_timeline(settings.blink.duration_seconds)
-    return LookAwayTimeline()
+# ---- 눈 운동 선택 ----
 
 
 def exercise_timeline(settings: ExercisesSettings) -> DotFollowTimeline | None:
@@ -312,44 +229,27 @@ def exercise_timeline(settings: ExercisesSettings) -> DotFollowTimeline | None:
 class LengthPreset:
     key: str
     label: str
-    blink_cycles: int  # 휴식의 깜빡임 사이클(회) 수
     dot_seconds: int  # 운동(점 따라가기) 총 시간(초)
 
 
 LENGTH_PRESETS = (
-    LengthPreset("short", "짧게", 3, 30),
-    LengthPreset("normal", "보통", 5, 60),  # 기본값과 같다: 휴식의 깜빡임 5회(36초) + 점 따라가기 1분
-    LengthPreset("long", "길게", 10, 90),
+    LengthPreset("short", "짧게", 30),
+    LengthPreset("normal", "보통", 60),  # 기본값과 같다
+    LengthPreset("long", "길게", 90),
 )
-
-
-def blink_seconds_for_cycles(cycles: int) -> int:
-    """깜빡임 사이클 수에 맞는 설정 시간(초). 준비·마무리가 더해진다. 사용자는 '몇 회'로 생각하고 초는 몰라도 된다."""
-    return PREPARE_SECONDS + FINISH_SECONDS + max(1, cycles) * CYCLE_SECONDS
-
-
-def blink_cycles_for_seconds(duration_seconds: int) -> int:
-    """설정된 시간(초)이 몇 사이클인지. 사이클 수로 나누어떨어지지 않으면 남는 시간은 마지막 쉬기가 흡수한다."""
-    return blink_timeline(duration_seconds).cycles
 
 
 def preset_changes(key: str) -> dict[str, int]:
     """프리셋을 고르면 바꿀 설정 경로와 값. 알 수 없는 키는 KeyError."""
     for preset in LENGTH_PRESETS:
         if preset.key == key:
-            return {
-                "exercises.blink.duration_seconds": blink_seconds_for_cycles(preset.blink_cycles),
-                "exercises.dot_follow.duration_seconds": preset.dot_seconds,
-            }
+            return {"exercises.dot_follow.duration_seconds": preset.dot_seconds}
     raise KeyError(key)
 
 
 def current_preset(settings: ExercisesSettings) -> str | None:
     """지금 설정이 어느 프리셋과 같은지. 고급 설정에서 따로 정했다면 None."""
     for preset in LENGTH_PRESETS:
-        if (
-            settings.blink.duration_seconds == blink_seconds_for_cycles(preset.blink_cycles)
-            and settings.dot_follow.duration_seconds == preset.dot_seconds
-        ):
+        if settings.dot_follow.duration_seconds == preset.dot_seconds:
             return preset.key
     return None

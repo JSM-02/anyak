@@ -2,9 +2,9 @@ from PySide6.QtCore import QPoint, Qt
 from PySide6.QtGui import QColor
 from test_exercise_window import make_window
 
-from eyeexercise.core.exercises import blink_timeline, dot_follow_timeline
+from eyeexercise.core.exercises import dot_follow_timeline
 from eyeexercise.ui import theme
-from eyeexercise.ui.exercise_window import DotCanvas, EyeWidget
+from eyeexercise.ui.exercise_window import DotCanvas
 from eyeexercise.ui.reminder_popup import ReminderPopup
 
 
@@ -16,10 +16,10 @@ def pixel(widget, x, y) -> QColor:
 
 
 def test_운동_창은_처음부터_끝까지_같은_바탕이다(qapp):
-    for timeline in (blink_timeline(30), dot_follow_timeline(60)):
+    for timeline in (dot_follow_timeline(30), dot_follow_timeline(60)):
         window, _ = make_window(qapp)
         window.start(timeline)
-        seconds = (0, 5, timeline.total_seconds - 1, timeline.total_seconds + 1)  # 준비·진행·마무리·먼 곳 바라보기
+        seconds = (0, 5, timeline.total_seconds - 2)  # 준비·진행·마무리
         backgrounds = set()
         for second in seconds:
             window._elapsed.ms = second * 1000
@@ -31,14 +31,14 @@ def test_운동_창은_처음부터_끝까지_같은_바탕이다(qapp):
 
 def test_운동_창_모서리는_둥글게_투명하다(qapp):
     window, _ = make_window(qapp)
-    window.start(blink_timeline(30))
+    window.start(dot_follow_timeline(30))
     assert window.grab().toImage().pixelColor(0, 0).alpha() == 0
     window.close()
 
 
 def test_운동_창_이름표는_깊은_초록_알약이고_버튼도_같은_초록이다(qapp):
     window, _ = make_window(qapp)
-    window.start(blink_timeline(30))
+    window.start(dot_follow_timeline(30))
     box = window._tag.geometry()
     assert pixel(window, box.left() + 2, box.center().y()).name() == theme.color("hero").name()
     button = window._button.geometry()
@@ -48,7 +48,7 @@ def test_운동_창_이름표는_깊은_초록_알약이고_버튼도_같은_초
 
 def test_진행에_따라_아래쪽_물이_차오른다(qapp):
     window, _ = make_window(qapp)
-    window.start(blink_timeline(30))  # 총 30초
+    window.start(dot_follow_timeline(30))  # 총 30초
     tops = []
     for ms in (0, 15000, 29000):
         window._elapsed.ms = ms
@@ -61,24 +61,12 @@ def test_진행에_따라_아래쪽_물이_차오른다(qapp):
     window.close()
 
 
-def test_먼_곳_바라보기_동안에는_물이_줄어든다(qapp):
-    window, _ = make_window(qapp)
-    timeline = blink_timeline(30)
-    window.start(timeline)
-    window._elapsed.ms = timeline.total_seconds * 1000 + 100
-    window._on_frame()
-    start = window.water_paths()[1].boundingRect().top()
-    window._elapsed.ms = (timeline.total_seconds + 15) * 1000
-    window._on_frame()
-    assert window.water_paths()[1].boundingRect().top() > start  # 낮아진다(화면 좌표에서 아래로)
-    window.close()
-
 
 def test_물_높이는_아래쪽_안내_자리를_넘지_않는다(qapp):
     from eyeexercise.ui.exercise_window import BAND_MAX
 
     window, _ = make_window(qapp)
-    window.start(blink_timeline(30))
+    window.start(dot_follow_timeline(30))
     window._elapsed.ms = 29900
     window._on_frame()
     top = window.water_paths()[1].boundingRect().top()
@@ -91,7 +79,7 @@ def test_다크_모드에서는_운동_창도_어두운_바탕이다(qapp):
     window, _ = make_window(qapp)
     theme.set_dark(True)
     try:
-        window.start(blink_timeline(30))
+        window.start(dot_follow_timeline(30))
         assert pixel(window, 6, window.height() // 2).name() == theme.DARK.paper
         assert theme.DARK.hero in window.styleSheet()  # 이름표·버튼의 초록
     finally:
@@ -113,14 +101,6 @@ def test_움직임을_줄이면_운동_창의_파도와_점의_물결이_멈춘�
     assert window._wave_t == 0.0 and not window._dots.animated
     window.close()
 
-
-def test_눈_윤곽과_홍채는_포인트_초록이고_눈_안쪽은_카드_바탕색이다(qapp):
-    eye = EyeWidget()
-    eye.resize(300, 160)
-    image = eye.grab().toImage()
-    colors = {QColor(image.pixel(x, y)).name() for x in range(0, 300, 2) for y in range(0, 160, 2)}
-    assert theme.color("accent").name() in colors  # 윤곽선·홍채
-    assert theme.color("surface").name() in colors  # 눈 안쪽
 
 
 def test_점_화면은_상자_없이_물방울_점이다(qapp):
@@ -196,21 +176,17 @@ def test_경로_그림_여섯_개가_있고_지금_경로가_정해진다(qapp):
     assert not row.grab().isNull()
 
 
-def test_점_따라가기_창은_지금_경로를_알려_주고_다른_구간에서는_숨긴다(qapp):
+def test_점_따라가기_창은_지금_경로를_알려_주고_준비와_마무리에서는_고르지_않는다(qapp):
     window, _ = make_window(qapp)
     window.start(dot_follow_timeline(60))
     assert window._patterns.isVisible() and window._patterns.current is None  # 준비
     window._elapsed.ms = (3 + 2 * 9 + 4) * 1000  # 세 번째 패턴
     window._on_frame()
     assert window._patterns.current == 2
-    window._elapsed.ms = 60 * 1000 + 500  # 먼 곳 바라보기
+    window._elapsed.ms = 58 * 1000  # 마무리
     window._on_frame()
-    assert not window._patterns.isVisible()
+    assert window._patterns.current is None  # 점을 따라가는 중이 아니면 어느 경로도 고르지 않는다
     window.close()
-    blink, _ = make_window(qapp)
-    blink.start(blink_timeline(30))
-    assert not blink._patterns.isVisible()
-    blink.close()
 
 
 # ---- 알림 팝업: 짙은 초록 물 ----

@@ -1,7 +1,7 @@
-"""눈 휴식·눈 운동 창. 타임라인(core/exercises)이 계산한 값을 그리기만 한다. 깜빡임이 켜진 휴식(깜빡임 + 먼 곳 바라보기)과 운동(점 따라가기)을 띄운다.
+"""눈 운동(점 따라가기) 창. 타임라인(core/exercises)이 계산한 값을 그리기만 한다. (눈 휴식의 먼 곳 바라보기는 알림 팝업 안에서 한다.)
 
-홈 화면·알림 팝업과 같은 물의 언어로 그린다. 창 맨 아래의 물이 진행에 따라 차오르고(먼 곳 바라보기 동안에는 줄어든다),
-점 따라가기의 점은 물방울이다. 점이 움직이는 영역은 따로 상자로 두르지 않는다. 점 따라가기는 끝나면 바로 닫힌다(먼 곳 바라보기는 이어지지 않는다).
+홈 화면·알림 팝업과 같은 물의 언어로 그린다. 창 맨 아래의 물이 진행에 따라 차오르고, 점은 물방울이다.
+점이 움직이는 영역은 따로 상자로 두르지 않는다. 끝나면 바로 닫힌다(먼 곳 바라보기는 이어지지 않는다).
 
 매 프레임 다시 그리는 곳은 점 둘레와 아래쪽 물뿐이다. 프레임 간격은 모니터 주사율에 맞춘다(60Hz면 16ms, 144Hz면 7ms).
 """
@@ -12,25 +12,14 @@ from PySide6.QtCore import QElapsedTimer, QPointF, QRect, QRectF, Qt, QTimer, Si
 from PySide6.QtGui import QCloseEvent, QColor, QCursor, QGuiApplication, QKeyEvent, QPainter, QPainterPath, QPen
 from PySide6.QtWidgets import QHBoxLayout, QLabel, QPushButton, QVBoxLayout, QWidget
 
-from eyeexercise.core.exercises import (
-    DOT_PATTERNS,
-    EXERCISE_BLINK,
-    EXERCISE_DOT_FOLLOW,
-    BlinkTimeline,
-    DotFollowTimeline,
-    ExerciseStep,
-    LookAwayTimeline,
-    Phase,
-)
+from eyeexercise.core.exercises import DOT_PATTERNS, DotFollowTimeline, ExerciseStep, Phase
 from eyeexercise.core.tide import WAVE_WEAK, wave_margin
 from eyeexercise.platform.win_motion import animations_enabled
 from eyeexercise.ui import theme
 from eyeexercise.ui.speech import Speaker
 from eyeexercise.ui.water import water_paths
 
-# 깜빡임은 눈을 감고 소리로도 안내하므로 작게, 점 따라가기는 점이 움직일 영역이 필요해서 크게 띄운다.
-WINDOW_SIZES = {EXERCISE_BLINK: (480, 320), EXERCISE_DOT_FOLLOW: (640, 440)}
-WINDOW_SIZE = WINDOW_SIZES[EXERCISE_BLINK]
+WINDOW_SIZE = (640, 440)  # 점이 움직일 영역이 필요해서 크게 띄운다. 화면이 작아도 이보다 줄지는 않는다
 DOT_WINDOW_WIDTH_RATIO = 0.7  # 점 따라가기 창이 차지하는 화면 너비 비율. 눈동자가 크게 움직이도록 크게 띄운다
 DOT_WINDOW_HEIGHT_RATIO = 0.88  # 세로는 안내 문구·버튼이 자리를 차지해서 점이 움직일 영역이 좁아지므로 더 크게 잡는다
 _SCREEN_MARGIN = 40  # 화면 가장자리에서 띄우는 최소 여백
@@ -38,11 +27,9 @@ _RADIUS = 20
 BAND_MIN, BAND_MAX = 12, 48  # 아래쪽 물의 높이(px). 시작할 때는 BAND_MIN(파도가 출렁여도 바닥이 늘 덮이는 높이), 끝날 때는 BAND_MAX
 
 
-def window_size(exercise: str, area: QRect) -> tuple[int, int]:
-    """운동 창의 크기. 깜빡임은 고정 크기, 점 따라가기는 화면 너비의 70%·높이의 88%(최소 크기 이상, 화면 안에서)."""
-    if exercise != EXERCISE_DOT_FOLLOW:
-        return WINDOW_SIZES[exercise]
-    min_w, min_h = WINDOW_SIZES[EXERCISE_DOT_FOLLOW]
+def window_size(area: QRect) -> tuple[int, int]:
+    """운동 창의 크기. 화면 너비의 70%·높이의 88%(최소 크기 이상, 화면 안에서)."""
+    min_w, min_h = WINDOW_SIZE
     width = max(min_w, round(area.width() * DOT_WINDOW_WIDTH_RATIO))  # int()는 1400*0.7=979.99…를 979로 자른다
     height = max(min_h, round(area.height() * DOT_WINDOW_HEIGHT_RATIO))
     return min(width, area.width() - _SCREEN_MARGIN), min(height, area.height() - _SCREEN_MARGIN)
@@ -71,94 +58,6 @@ _STYLE = """
 }
 #exercise QPushButton:hover { background: #1B6B64; }
 """
-
-
-def _ease(openness: float) -> float:
-    """눈꺼풀이 움직이는 속도 곡선. 감기·뜨기의 시작과 끝은 천천히, 가운데는 빠르게 해서 실제 눈처럼 부드럽게 보인다."""
-    return openness * openness * (3 - 2 * openness)
-
-
-class EyeWidget(QWidget):
-    """눈 모양. openness 1.0은 활짝 뜬 눈, 0.0은 감은 눈.
-
-    아몬드 모양의 눈꺼풀이 위아래로 닫히고(위 눈꺼풀이 더 많이 움직인다), 완전히 감으면 아래로 처진 곡선이 된다.
-    openness는 시간에 비례해 오므로 그리는 쪽에서 부드러운 곡선(_ease)을 입힌다.
-    """
-
-    _IRIS_R = 31.0
-    _PUPIL_R = 13.0
-    _LOWER_LID = 0.8  # 아래 눈꺼풀이 위 눈꺼풀의 몇 배만큼 움직이는지 (1이면 위아래 대칭)
-    _CURVE_PEAK = 0.75  # 3차 곡선의 가운데 높이는 조절점 높이의 3/4이다
-
-    @staticmethod
-    def _sag(eased: float) -> float:
-        return 9.0 * (1 - eased)  # 감을수록 눈꼬리 선이 아래로 처진다
-
-    def iris_center(self) -> QPointF:
-        """홍채·동공의 위치. 눈꺼풀 사이로 열린 부분의 한가운데에 둔다 (눈꼬리 선이 아니라).
-
-        위 눈꺼풀과 아래 눈꺼풀이 움직이는 양이 달라서, 눈꼬리 선에 그리면 눈이 아래를 보는 것처럼 보인다.
-        """
-        e = _ease(self._openness)
-        cy = self.height() / 2
-        reach = min(self.height() * 0.4, 58.0) * 1.35
-        top = -reach * e  # 위 눈꺼풀이 올라간 만큼 (눈꼬리 선 기준)
-        bottom = reach * e * self._LOWER_LID
-        return QPointF(self.width() / 2, cy + self._sag(e) * self._CURVE_PEAK + (top + bottom) / 2 * self._CURVE_PEAK)
-
-    def __init__(self) -> None:
-        super().__init__()
-        self._openness = 1.0
-        self.setMinimumSize(200, 110)
-
-    def set_openness(self, value: float) -> None:
-        self._openness = max(0.0, min(1.0, value))
-        self.update()
-
-    def lid_path(self) -> QPainterPath:
-        """눈 윤곽(아몬드). 감을수록 납작해지고 아래로 처진다."""
-        e = _ease(self._openness)
-        cx, cy = self.width() / 2, self.height() / 2
-        half_w = min(self.width() * 0.4, 110.0)
-        reach = min(self.height() * 0.4, 58.0) * 1.35  # 3차 곡선 조절점 높이 (실제로 올라가는 높이는 약 3/4)
-        sag = self._sag(e)
-        up = cy + sag - reach * e
-        down = cy + sag + reach * e * self._LOWER_LID  # 아래 눈꺼풀은 덜 움직인다
-        path = QPainterPath()
-        path.moveTo(cx - half_w, cy)
-        path.cubicTo(cx - half_w * 0.45, up, cx + half_w * 0.45, up, cx + half_w, cy)
-        path.cubicTo(cx + half_w * 0.45, down, cx - half_w * 0.45, down, cx - half_w, cy)
-        return path
-
-    def paintEvent(self, _event) -> None:
-        painter = QPainter(self)
-        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        e = _ease(self._openness)
-        center = self.iris_center()
-        eye = self.lid_path()
-
-        line = theme.color("accent")  # 윤곽선과 홍채는 포인트 초록, 눈 안쪽은 카드 바탕색
-        outline = QPen(line, 5)
-        outline.setCapStyle(Qt.PenCapStyle.RoundCap)
-        outline.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
-        painter.setPen(outline)
-        painter.setBrush(theme.color("surface"))
-        painter.drawPath(eye)
-
-        if e > 0.12:  # 거의 감겼을 때는 홍채를 그리지 않는다
-            painter.setClipPath(eye)
-            painter.setPen(Qt.PenStyle.NoPen)
-            painter.setBrush(line)
-            painter.drawEllipse(center, self._IRIS_R, self._IRIS_R)
-            painter.setBrush(QColor("#202124"))  # 동공은 어느 테마에서나 어둡게
-            painter.drawEllipse(center, self._PUPIL_R, self._PUPIL_R)
-            painter.setBrush(QColor(255, 255, 255, 235))  # 눈에 생기를 주는 작은 반짝임
-            painter.drawEllipse(QPointF(center.x() - 9, center.y() - 9), 4.5, 4.5)
-            painter.setClipping(False)
-            painter.setPen(outline)  # 홍채가 덮은 윤곽선을 다시 그린다
-            painter.setBrush(Qt.BrushStyle.NoBrush)
-            painter.drawPath(eye)
-        painter.end()
 
 
 class DotCanvas(QWidget):
@@ -307,7 +206,7 @@ class ExerciseWindow(QWidget):
         self._speaker = speaker
         self._animations = animations
         self._last_phase: Phase | None = None
-        self._timeline: BlinkTimeline | LookAwayTimeline | DotFollowTimeline | None = None
+        self._timeline: DotFollowTimeline | None = None
         self._running = False  # 중단할 수 있는 상태 (운동이 끝나기 전)
         self._progress = 0.0  # 아래쪽 물의 높이를 정하는 진행(0~1)
         self._wave_t = 0.0
@@ -317,7 +216,6 @@ class ExerciseWindow(QWidget):
         self._timer.setInterval(_FRAME_MS)
         self._timer.timeout.connect(self._on_frame)
 
-        self._eye = EyeWidget()
         self._dots = DotCanvas()
         self._patterns = PatternRow()
         self._tag = QLabel()  # '눈 휴식' / '눈 운동'
@@ -326,7 +224,7 @@ class ExerciseWindow(QWidget):
         self._message.setObjectName("message")
         self._message.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._message.setWordWrap(True)
-        self._message.setMinimumHeight(40)  # 문구가 비는 쉬기 구간에도 눈 모양이 흔들리지 않게 높이를 고정한다
+        self._message.setMinimumHeight(40)  # 문구가 바뀌어도 아래 요소가 흔들리지 않게 높이를 고정한다
         self._button = QPushButton("중단")
         self._button.setCursor(Qt.CursorShape.PointingHandCursor)
         self._button.clicked.connect(self._on_button)
@@ -343,7 +241,6 @@ class ExerciseWindow(QWidget):
         layout.setContentsMargins(28, 20, 28, 12 + BAND_MAX)  # 아래는 물이 차오르는 자리만큼 비워 둔다
         layout.setSpacing(10)
         layout.addWidget(self._tag, alignment=Qt.AlignmentFlag.AlignLeft)
-        layout.addWidget(self._eye, stretch=1)
         layout.addWidget(self._dots, stretch=1)
         layout.addWidget(self._patterns)
         layout.addWidget(self._message)
@@ -365,19 +262,14 @@ class ExerciseWindow(QWidget):
         """운동의 진행(0~1). 먼 곳 바라보기 동안에는 줄어든다. 아래쪽 물의 높이가 이 값을 따른다."""
         return self._progress
 
-    def start(self, timeline: BlinkTimeline | LookAwayTimeline | DotFollowTimeline) -> None:
-        """눈 휴식(깜빡임 + 먼 곳 바라보기) 또는 눈 운동(점 따라가기)을 시작한다. 마우스 커서가 있는 모니터의 가운데에 띄운다."""
+    def start(self, timeline: DotFollowTimeline) -> None:
+        """눈 운동(점 따라가기)을 시작한다. 마우스 커서가 있는 모니터의 가운데에 띄운다."""
         self._timeline = timeline
-        is_blink = timeline.exercise == EXERCISE_BLINK
-        self._tag.setText("눈 휴식" if is_blink else "눈 운동")
-        self._eye.set_openness(1.0)
-        self._eye.setVisible(is_blink)
-        self._dots.setVisible(not is_blink)
-        self._patterns.setVisible(not is_blink)
+        self._tag.setText("눈 운동")
         self._dots.set_animate(self._animations())
         self._dots.set_dot(None)
         area = self._screen_area()
-        size = window_size(timeline.exercise, area)
+        size = window_size(area)
         self.setMinimumSize(0, 0)  # 이전 운동의 최소 크기가 남아 작게 줄이지 못하는 일을 막는다
         self.setMinimumSize(*size)
         self.resize(*size)
@@ -420,7 +312,7 @@ class ExerciseWindow(QWidget):
         step = self._timeline.step_at(seconds)
         self._apply(step, seconds)
         if step.finished and self._running:
-            # 운동을 마쳤다. 깜빡임 휴식은 먼 곳 바라보기 중에 닫아도 완료로 센다.
+            # 운동을 마쳤다(마무리가 끝나는 시점). 곧바로 닫힌다.
             self._running = False
             self._button.setText("닫기")
             self._hint.setText("Esc 키로 닫을 수 있어요")
@@ -429,13 +321,9 @@ class ExerciseWindow(QWidget):
             self.close()  # 카운트다운이 끝나면 저절로 닫는다
 
     def _apply(self, step: ExerciseStep, seconds: float) -> None:
-        if step.eye_openness is not None:
-            self._eye.set_openness(step.eye_openness)
         self._dots.set_dot(step.dot, seconds)
         self._patterns.set_current(step.pattern)
         text = step.message
-        if step.countdown:
-            text = f"{text} · {step.countdown}"
         self._message.setText(text)
         self._progress = min(1.0, max(0.0, step.progress))
         self._wave_t = seconds if self._animations() else 0.0

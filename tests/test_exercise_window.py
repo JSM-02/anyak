@@ -3,7 +3,7 @@ from fakes import FakeClock, FakeIdle
 from PySide6.QtCore import QRect, Qt
 from PySide6.QtTest import QTest
 
-from eyeexercise.core.exercises import Phase, blink_timeline
+from eyeexercise.core.exercises import Phase, dot_follow_timeline
 from eyeexercise.core.history import History
 from eyeexercise.core.scheduler import ReminderScheduler, State
 from eyeexercise.core.settings import Settings
@@ -47,19 +47,19 @@ def make_window(qapp, speaker=None):
 
 def test_시작하면_창이_뜨고_첫_안내가_보인다(qapp):
     window, _ = make_window(qapp)
-    window.start(blink_timeline(30))
+    window.start(dot_follow_timeline(30))
     assert window.isVisible() and window.running
-    assert window._message.text() == "편안하게 앉아 화면을 바라보세요"
-    assert window.size().width() >= 480 and window.size().height() >= 320
+    assert "고개" in window._message.text() and "점" in window._message.text()
+    assert window.size().width() >= 640 and window.size().height() >= 440
     window.close()
 
 
 def test_시간이_흐르면_안내와_진행률이_바뀐다(qapp):
     window, _ = make_window(qapp)
-    window.start(blink_timeline(30))
+    window.start(dot_follow_timeline(30))
     window._elapsed.ms = 3000
     window._on_frame()
-    assert window._message.text() == "천천히 눈을 감으세요"
+    assert window._message.text() == "점을 좌우로 따라가세요"  # 첫 패턴
     window._elapsed.ms = 15000
     window._on_frame()
     assert window.progress == pytest.approx(0.5)
@@ -68,27 +68,27 @@ def test_시간이_흐르면_안내와_진행률이_바뀐다(qapp):
 
 def test_끝까지_하면_완료를_한_번만_알린다(qapp):
     window, events = make_window(qapp)
-    window.start(blink_timeline(30))
+    window.start(dot_follow_timeline(30))
     window._elapsed.ms = 30000
     window._on_frame()
     window._on_frame()  # 다시 호출돼도 중복 알림이 없어야 한다
-    assert events == [("completed", "blink", 30)]
+    assert events == [("completed", "dot_follow", 30)]
     assert not window.running
     assert window._button.text() == "닫기"
 
 
 def test_완료_뒤_창을_닫아도_중단으로_알리지_않는다(qapp):
     window, events = make_window(qapp)
-    window.start(blink_timeline(30))
+    window.start(dot_follow_timeline(30))
     window._elapsed.ms = 30000
     window._on_frame()
     window.close()
-    assert events == [("completed", "blink", 30)]
+    assert events == [("completed", "dot_follow", 30)]
 
 
 def test_Esc로_중단하면_완료_없이_중단만_알린다(qapp):
     window, events = make_window(qapp)
-    window.start(blink_timeline(30))
+    window.start(dot_follow_timeline(30))
     window._elapsed.ms = 10000
     window._on_frame()
     QTest.keyClick(window, Qt.Key.Key_Escape)
@@ -98,69 +98,21 @@ def test_Esc로_중단하면_완료_없이_중단만_알린다(qapp):
 
 def test_중단_버튼도_중단으로_처리한다(qapp):
     window, events = make_window(qapp)
-    window.start(blink_timeline(30))
+    window.start(dot_follow_timeline(30))
     window._button.click()
     assert events == [("aborted",)]
 
 
 def test_너무_짧은_설정도_창은_정상_동작한다(qapp):
     window, events = make_window(qapp)
-    window.start(blink_timeline(5))  # 최소 12초(사이클 1회)로 보정된다
+    window.start(dot_follow_timeline(5))  # 최소 12초(패턴 1개)로 보정된다
     window._elapsed.ms = 12000
     window._on_frame()
-    assert events == [("completed", "blink", 12)]
+    assert events == [("completed", "dot_follow", 12)]
 
 
-# ---- 먼 곳 바라보기 카운트다운과 자동 닫기 ----
 
 
-def test_운동이_끝나면_먼_곳_바라보기_카운트다운이_표시된다(qapp):
-    window, _ = make_window(qapp)
-    window.start(blink_timeline(30))
-    window._elapsed.ms = 30000
-    window._on_frame()
-    assert window._message.text() == "먼 곳을 바라보세요 · 20"
-    window._elapsed.ms = 40500
-    window._on_frame()
-    assert window._message.text() == "먼 곳을 바라보세요 · 10"
-    window._elapsed.ms = 49500
-    window._on_frame()
-    assert window._message.text() == "먼 곳을 바라보세요 · 1"
-    assert window.isVisible()
-    window.close()
-
-
-def test_카운트다운_중에는_진행_막대가_줄어든다(qapp):
-    window, _ = make_window(qapp)
-    window.start(blink_timeline(30))
-    window._elapsed.ms = 30000
-    window._on_frame()
-    assert window.progress == pytest.approx(1.0)
-    window._elapsed.ms = 40000
-    window._on_frame()
-    assert window.progress == pytest.approx(0.5)
-    window.close()
-
-
-def test_카운트다운이_끝나면_저절로_닫히고_중단으로_알리지_않는다(qapp):
-    window, events = make_window(qapp)
-    window.start(blink_timeline(30))
-    window._elapsed.ms = 30000
-    window._on_frame()
-    window._elapsed.ms = 50000
-    window._on_frame()
-    assert not window.isVisible()
-    assert events == [("completed", "blink", 30)]
-
-
-def test_카운트다운_중에_닫아도_완료는_이미_기록되고_중단으로_알리지_않는다(qapp):
-    window, events = make_window(qapp)
-    window.start(blink_timeline(30))
-    window._elapsed.ms = 35000
-    window._on_frame()
-    QTest.keyClick(window, Qt.Key.Key_Escape)
-    assert not window.isVisible()
-    assert events == [("completed", "blink", 30)]
 
 
 # ---- 소리 안내 ----
@@ -169,46 +121,24 @@ def test_카운트다운_중에_닫아도_완료는_이미_기록되고_중단�
 def test_단계가_바뀔_때마다_소리_안내를_한_번씩_낸다(qapp):
     speaker = FakeSpeaker()
     window, _ = make_window(qapp, speaker)
-    window.start(blink_timeline(30))
+    window.start(dot_follow_timeline(30))
     for ms in (500, 1000, 2900):  # 같은 단계(준비)에서는 다시 말하지 않는다
         window._elapsed.ms = ms
         window._on_frame()
     assert speaker.phases == [Phase.PREPARE]
-    # 감기(2초) → 유지(1초) → 뜨기(2초) → 쉬기(1초)가 6초마다 이어진다
-    steps = [(3000, Phase.CLOSE), (5000, Phase.HOLD), (6000, Phase.OPEN), (8000, Phase.REST), (9000, Phase.CLOSE)]
-    for ms, phase in steps:
+    # 준비(3초) → 점 따라가기 → 마무리(3초)
+    for ms, phase in ((3000, Phase.TRACK), (10000, Phase.TRACK), (28000, Phase.FINISH)):
         window._elapsed.ms = ms
         window._on_frame()
         assert speaker.phases[-1] is phase
-    window.close()
-
-
-def test_사이클이_딱_맞지_않아_남는_시간이_있으면_마지막에_쉬기_안내가_나온다(qapp):
-    speaker = FakeSpeaker()
-    window, _ = make_window(qapp, speaker)
-    window.start(blink_timeline(31))  # 준비 3 + 사이클 4회(24초) + 남는 1초 + 마무리 3
-    window._elapsed.ms = 27000
-    window._on_frame()
-    assert speaker.phases[-1] is Phase.REST
-    window.close()
-
-
-def test_먼_곳_바라보기_안내도_소리로_나온다(qapp):
-    speaker = FakeSpeaker()
-    window, _ = make_window(qapp, speaker)
-    window.start(blink_timeline(30))
-    window._elapsed.ms = 28000
-    window._on_frame()
-    window._elapsed.ms = 30000
-    window._on_frame()
-    assert speaker.phases[-2:] == [Phase.FINISH, Phase.LOOK_AWAY]
+    assert speaker.phases == [Phase.PREPARE, Phase.TRACK, Phase.FINISH]  # 같은 단계에서는 다시 말하지 않는다
     window.close()
 
 
 def test_창을_닫으면_소리를_멈춘다(qapp):
     speaker = FakeSpeaker()
     window, _ = make_window(qapp, speaker)
-    window.start(blink_timeline(30))
+    window.start(dot_follow_timeline(30))
     window.close()
     assert speaker.stopped == 1
 
@@ -216,19 +146,19 @@ def test_창을_닫으면_소리를_멈춘다(qapp):
 def test_다시_시작하면_첫_단계_안내를_다시_한다(qapp):
     speaker = FakeSpeaker()
     window, _ = make_window(qapp, speaker)
-    window.start(blink_timeline(30))
+    window.start(dot_follow_timeline(30))
     window.close()
-    window.start(blink_timeline(30))
+    window.start(dot_follow_timeline(30))
     assert speaker.phases == [Phase.PREPARE, Phase.PREPARE]
     window.close()
 
 
 def test_소리가_꺼져_있어도_운동은_진행된다(qapp):
     window, events = make_window(qapp, None)
-    window.start(blink_timeline(30))
+    window.start(dot_follow_timeline(30))
     window._elapsed.ms = 30000
     window._on_frame()
-    assert events == [("completed", "blink", 30)]
+    assert events == [("completed", "dot_follow", 30)]
     window.close()
 
 
@@ -247,9 +177,9 @@ def _exercising_controller(history):
 def test_완료하면_기록하고_타이머를_다시_센다(qapp):
     history = History()
     controller = _exercising_controller(history)
-    controller.complete_exercise("blink", 30)
+    controller.complete_exercise("dot_follow", 30)
     assert controller.state is State.RUNNING
-    assert [(e.type, e.exercise, e.duration_seconds) for e in history.events] == [("completed", "blink", 30)]
+    assert [(e.type, e.exercise, e.duration_seconds) for e in history.events] == [("completed", "dot_follow", 30)]
 
 
 def test_중단하면_기록하지_않고_타이머만_다시_센다(qapp):
@@ -264,18 +194,9 @@ def test_운동_중이_아닐_때의_완료_요청은_기록하지_않는다(qap
     history = History()
     controller = _exercising_controller(history)
     controller.abort_exercise()
-    controller.complete_exercise("blink", 30)
+    controller.complete_exercise("dot_follow", 30)
     assert history.events == ()
 
-
-def test_쉬는_동안에는_문구가_비고_창_구성은_그대로다(qapp):
-    window, _ = make_window(qapp)
-    window.start(blink_timeline(30))
-    window._elapsed.ms = 8500  # 첫 사이클의 쉬기(8~9초)
-    window._on_frame()
-    assert window._message.text() == ""
-    assert window._message.minimumHeight() >= 40  # 문구가 비어도 높이가 유지된다
-    window.close()
 
 
 # ---- 점 따라가기 ----
@@ -296,7 +217,7 @@ def dot_window(qapp, speaker=None, duration=60, area=SCREEN):
 def test_점_따라가기는_화면의_큰_창과_점_화면을_쓴다(qapp):
     window, _ = dot_window(qapp)
     assert window.isVisible() and window.running
-    assert window._dots.isVisible() and not window._eye.isVisible()
+    assert window._dots.isVisible() and window._patterns.isVisible()
     assert (window.width(), window.height()) == (1344, 915)  # 1920×1040의 너비 70%·높이 88%
     window.close()
 
@@ -308,20 +229,6 @@ def test_점_따라가기_창은_화면_가운데에_뜬다(qapp):
     window.close()
 
 
-def test_깜빡임은_작은_창과_눈_모양을_쓴다(qapp):
-    window, _ = make_window(qapp)
-    window.start(blink_timeline(30))
-    assert window._eye.isVisible() and not window._dots.isVisible()
-    assert (window.width(), window.height()) == (480, 320)
-    window.close()
-
-
-def test_운동을_바꿔_다시_띄우면_창_크기와_화면이_따라_바뀐다(qapp):
-    window, _ = dot_window(qapp)
-    window.close()
-    window.start(blink_timeline(30))
-    assert (window.width(), window.height()) == (480, 320) and window._eye.isVisible()
-    window.close()
 
 
 def test_준비_문구와_점_위치가_보인다(qapp):
@@ -381,14 +288,14 @@ def test_점_따라가기가_끝나면_먼_곳_바라보기_없이_완료를_알
     assert "먼 곳" not in window._message.text()
 
 
-def test_점_따라가기_창은_끝까지_같은_큰_창이고_눈_모양이_나타나지_않는다(qapp):
+def test_점_따라가기_창은_끝까지_같은_큰_창이다(qapp):
     window, _ = dot_window(qapp)
     size = (window.width(), window.height())
     for ms in (500, 20000, 58000, 59900):
         window._elapsed.ms = ms
         window._on_frame()
         assert (window.width(), window.height()) == size
-        assert window._dots.isVisible() and not window._eye.isVisible()
+        assert window._dots.isVisible() and window._patterns.isVisible()
     window.close()
 
 
@@ -415,42 +322,17 @@ def test_점_따라가기의_소리는_준비와_마무리에서만_난다(qapp)
 # ---- 창 크기 ----
 
 
-def test_깜빡임_창은_화면_크기와_상관없이_고정이다():
-    for area in (QRect(0, 0, 1280, 720), QRect(0, 0, 3840, 2100)):
-        assert window_size("blink", area) == (480, 320)
+def test_창은_화면_너비_70퍼센트_높이_88퍼센트이고_큰_화면일수록_커진다():
+    assert window_size(QRect(0, 0, 1920, 1040)) == (1344, 915)
+    assert window_size(QRect(0, 0, 2560, 1400)) == (1792, 1232)
+    assert window_size(QRect(0, 0, 1366, 728)) == (956, 641)  # 728*0.88=640.6
 
 
-def test_점_따라가기_창은_너비_70퍼센트_높이_88퍼센트이고_큰_화면일수록_커진다():
-    assert window_size("dot_follow", QRect(0, 0, 1920, 1040)) == (1344, 915)
-    assert window_size("dot_follow", QRect(0, 0, 2560, 1400)) == (1792, 1232)
-    assert window_size("dot_follow", QRect(0, 0, 1366, 728)) == (956, 641)  # 728*0.88=640.6
-
-
-def test_점_따라가기_창은_작은_화면에서도_최소_크기를_지키되_화면_밖으로_나가지_않는다():
-    assert window_size("dot_follow", QRect(0, 0, 800, 600)) == (640, 528)  # 너비는 70%(560)가 최소 640보다 작아 최소 크기, 높이는 88%(528)
-    w, h = window_size("dot_follow", QRect(0, 0, 600, 400))
-    assert (w, h) == (560, 360)  # 화면보다 크게 뜨지 않는다 (여백 40)
-    assert window_size("dot_follow", QRect(0, 0, 1024, 600)) == (717, 528)  # 너비 70%(717)와 높이 88%(528)가 모두 최소보다 크다
-
-
-def test_점_따라가기_창은_깜빡임_창보다_크다():
-    w_dot, h_dot = window_size("dot_follow", QRect(0, 0, 1920, 1040))
-    w_blink, h_blink = window_size("blink", QRect(0, 0, 1920, 1040))
-    assert w_dot > w_blink and h_dot > h_blink
-
-
-# ---- 깜빡임: 먼 곳 바라보기에서도 같은 창 ----
-
-
-def test_깜빡임은_먼_곳_바라보기에서도_창이_그대로다(qapp):
-    window, _ = make_window(qapp)
-    window.start(blink_timeline(30))
-    before = (window.width(), window.height(), window.geometry().topLeft())
-    window._elapsed.ms = 30000
-    window._on_frame()
-    assert (window.width(), window.height(), window.geometry().topLeft()) == before
-    assert window._eye.isVisible()
-    window.close()
+def test_창은_작은_화면에서도_최소_크기를_지키되_화면_밖으로_나가지_않는다():
+    assert window_size(QRect(0, 0, 800, 600)) == (640, 528)  # 너비는 70%(560)가 최소 640보다 작아 최소 크기, 높이는 88%(528)
+    w, h = window_size(QRect(0, 0, 600, 400))
+    assert w <= 600 - 40 and h <= 400 - 40  # 최소 크기(640×440)보다 화면이 작으면 화면 안에 들어오게 줄인다
+    assert window_size(QRect(0, 0, 1024, 600)) == (717, 528)  # 너비 70%(717)와 높이 88%(528)가 모두 최소보다 크다
 
 
 # ---- 부드러운 움직임: 약 60fps의 정밀 타이머 ----
@@ -460,54 +342,3 @@ def test_프레임은_약_60fps의_정밀_타이머로_그린다(qapp):
     window, _ = make_window(qapp)
     assert window._timer.interval() <= 17
     assert window._timer.timerType() == Qt.TimerType.PreciseTimer
-
-
-# ---- 눈 모양 (7.5c) ----
-
-
-def test_눈은_감을수록_납작해지고_완전히_감으면_선이_된다(qapp):
-    from eyeexercise.ui.exercise_window import EyeWidget
-
-    eye = EyeWidget()
-    eye.resize(260, 140)
-    heights = []
-    for openness in (1.0, 0.7, 0.4, 0.15, 0.0):
-        eye.set_openness(openness)
-        heights.append(eye.lid_path().boundingRect().height())
-    assert heights == sorted(heights, reverse=True)
-    assert heights[0] > 60 and heights[-1] < 8  # 활짝 뜬 눈은 높고, 감은 눈은 거의 선
-
-
-def test_눈꺼풀_움직임은_양끝이_느리고_가운데가_빠르다():
-    from eyeexercise.ui.exercise_window import _ease
-
-    assert _ease(0.0) == 0.0 and _ease(1.0) == 1.0 and _ease(0.5) == pytest.approx(0.5)
-    assert _ease(0.1) < 0.1 and _ease(0.9) > 0.9  # 시작과 끝은 선형보다 느리게 움직인다
-    values = [_ease(i / 20) for i in range(21)]
-    assert values == sorted(values)  # 항상 한 방향으로 움직인다
-
-
-def test_눈동자는_열린_눈의_한가운데에_있다(qapp):
-    """눈꺼풀 사이 열린 부분의 위아래 한가운데에 눈동자를 둔다 (눈이 아래를 보는 것처럼 보이지 않게)."""
-    from eyeexercise.ui.exercise_window import EyeWidget
-
-    eye = EyeWidget()
-    eye.resize(260, 140)
-    for openness in (1.0, 0.8, 0.5, 0.25):
-        eye.set_openness(openness)
-        rect = eye.lid_path().boundingRect()
-        assert eye.iris_center().y() == pytest.approx(rect.center().y(), abs=2.0), openness
-        assert eye.iris_center().x() == pytest.approx(130.0)
-
-
-def test_활짝_뜬_눈에서_눈동자가_눈_윤곽_안에_완전히_들어온다(qapp):
-    from PySide6.QtCore import QPointF
-
-    from eyeexercise.ui.exercise_window import EyeWidget
-
-    eye = EyeWidget()
-    eye.resize(260, 140)
-    eye.set_openness(1.0)
-    path, c = eye.lid_path(), eye.iris_center()
-    for dx, dy in ((0, -EyeWidget._IRIS_R + 3), (0, EyeWidget._IRIS_R - 3), (-EyeWidget._IRIS_R + 3, 0), (EyeWidget._IRIS_R - 3, 0)):
-        assert path.contains(QPointF(c.x() + dx, c.y() + dy)), (dx, dy)  # 홍채 위·아래·양옆이 윤곽 안

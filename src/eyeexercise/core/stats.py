@@ -10,7 +10,7 @@ from dataclasses import dataclass, replace
 from datetime import date, datetime, timedelta, tzinfo
 from enum import Enum
 
-from eyeexercise.core.exercises import EXERCISE_BLINK, EXERCISE_DOT_FOLLOW
+from eyeexercise.core.exercises import EXERCISE_DOT_FOLLOW
 from eyeexercise.core.history import (
     ACTIVITY_EXERCISE,
     ACTIVITY_REST,
@@ -23,7 +23,7 @@ from eyeexercise.core.history import (
 from eyeexercise.core.usage import UsageLog
 
 WEEKDAYS = "월화수목금토일"  # date.weekday() 순서 (월요일 = 0). 주는 월요일에 시작한다.
-EXERCISE_NAMES = {EXERCISE_BLINK: "깜빡임", EXERCISE_DOT_FOLLOW: "점 따라가기"}
+EXERCISE_NAMES = {EXERCISE_DOT_FOLLOW: "점 따라가기"}  # 눈 휴식은 이름 대신 "눈 휴식"으로 쓴다
 
 
 class Period(Enum):

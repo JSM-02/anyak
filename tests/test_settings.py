@@ -9,8 +9,6 @@ def test_기본값():
     assert s.snooze_minutes == 5
     assert s.idle_pause_minutes == 1
     assert s.idle_reset_minutes == 5
-    assert s.exercises.blink.enabled is False  # 기본은 팝업에서 20초 먼 곳 바라보기만. 깜빡임은 설정에서 켠다
-    assert s.exercises.blink.duration_seconds == 36  # 깜빡임 5회
     assert s.exercises.dot_follow.duration_seconds == 60
     assert s.exercises.daily_goal == 2
     assert s.exercises.dot_follow.speed == "normal"
@@ -38,9 +36,9 @@ def test_모르는_키는_무시한다():
 
 
 def test_누락된_키는_기본값으로_채운다():
-    s = settings_from_dict({"exercises": {"blink": {"enabled": False}}})
-    assert s.exercises.blink.enabled is False
-    assert s.exercises.blink.duration_seconds == 36
+    s = settings_from_dict({"exercises": {"dot_follow": {"enabled": False}}})
+    assert s.exercises.dot_follow.enabled is False
+    assert s.exercises.dot_follow.duration_seconds == 60
     assert s.interval_minutes == 20
 
 
@@ -48,20 +46,23 @@ def test_범위를_벗어난_값은_경계값으로_보정한다():
     assert settings_from_dict({"interval_minutes": 0}).interval_minutes == 1
     assert settings_from_dict({"interval_minutes": 9999}).interval_minutes == 120
     assert settings_from_dict({"snooze_minutes": -3}).snooze_minutes == 1
-    s = settings_from_dict({"exercises": {"blink": {"duration_seconds": 1}}})
-    assert s.exercises.blink.duration_seconds == 12  # 깜빡임 1회
-
-
-def test_고급_설정_범위는_깜빡임_1에서_15회_점_따라가기_10초에서_2분이다():
-    from eyeexercise.core.exercises import blink_cycles_for_seconds
-    from eyeexercise.core.settings import BLINK_SECONDS_RANGE, DOT_FOLLOW_SECONDS_RANGE
-
-    assert (blink_cycles_for_seconds(BLINK_SECONDS_RANGE[0]), blink_cycles_for_seconds(BLINK_SECONDS_RANGE[1])) == (1, 15)
-    assert DOT_FOLLOW_SECONDS_RANGE == (10, 120)
-    s = settings_from_dict({"exercises": {"blink": {"duration_seconds": 999}, "dot_follow": {"duration_seconds": 999}}})
-    assert (s.exercises.blink.duration_seconds, s.exercises.dot_follow.duration_seconds) == (96, 120)
     s = settings_from_dict({"exercises": {"dot_follow": {"duration_seconds": 1}}})
     assert s.exercises.dot_follow.duration_seconds == 10
+
+
+def test_고급_설정_범위는_점_따라가기_10초에서_2분이다():
+    from eyeexercise.core.settings import DOT_FOLLOW_SECONDS_RANGE
+
+    assert DOT_FOLLOW_SECONDS_RANGE == (10, 120)
+    s = settings_from_dict({"exercises": {"dot_follow": {"duration_seconds": 999}}})
+    assert s.exercises.dot_follow.duration_seconds == 120
+
+
+def test_예전_설정_파일의_깜빡임_항목은_무시하고_다시_저장하면_사라진다():
+    old = {"interval_minutes": 25, "exercises": {"blink": {"enabled": True, "duration_seconds": 66}, "dot_follow": {"enabled": True}}}
+    s = settings_from_dict(old)
+    assert s.interval_minutes == 25 and not hasattr(s.exercises, "blink")
+    assert "blink" not in settings_to_dict(s)["exercises"]
 
 
 def test_타입이_잘못된_값은_기본값():

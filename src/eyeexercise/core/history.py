@@ -1,6 +1,6 @@
 """휴식·운동 기록 모델. 이벤트 단위로 쌓고, 일별 집계는 여기서 계산한다 (파일 I/O 없음).
 
-눈 휴식(깜빡임 + 먼 곳 바라보기)과 눈 운동(점 따라가기)을 구분한다. 완료 이벤트는 운동 종류(`exercise`)로,
+눈 휴식(먼 곳 바라보기)과 눈 운동(점 따라가기)을 구분한다. 완료 이벤트는 운동 종류(`exercise`)로,
 건너뜀·미룸은 `activity`에 저장한 값으로 구분한다. `activity`가 없는 옛 건너뜀·미룸은 휴식인지 운동인지
 알 수 없어서 `events`(집계에 쓰는 목록)에서 빠진다. 파일에는 그대로 남는다.
 
@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from datetime import date, datetime, tzinfo
 from typing import Any
 
-from eyeexercise.core.exercises import EXERCISE_BLINK
+from eyeexercise.core.exercises import EXERCISE_REST
 
 log = logging.getLogger(__name__)
 
@@ -23,7 +23,7 @@ EVENT_SNOOZED = "snoozed"
 EVENT_SKIPPED = "skipped"
 EVENT_TYPES = (EVENT_COMPLETED, EVENT_SNOOZED, EVENT_SKIPPED)
 
-ACTIVITY_REST = "rest"  # 눈 휴식: 깜빡임 + 먼 곳 바라보기
+ACTIVITY_REST = "rest"  # 눈 휴식: 먼 곳 바라보기
 ACTIVITY_EXERCISE = "exercise"  # 눈 운동: 점 따라가기
 ACTIVITIES = (ACTIVITY_REST, ACTIVITY_EXERCISE)
 
@@ -40,10 +40,10 @@ class HistoryEvent:
 def activity_of(event: HistoryEvent) -> str | None:
     """이벤트가 휴식(rest)인지 운동(exercise)인지. 옛 건너뜀·미룸처럼 알 수 없으면 None.
 
-    완료는 깜빡임이면 휴식, 그 밖의 운동(점 따라가기 등)은 운동이다.
+    완료는 눈 휴식이면 휴식, 그 밖의 운동(점 따라가기 등)은 운동이다.
     """
     if event.type == EVENT_COMPLETED:
-        return ACTIVITY_REST if event.exercise == EXERCISE_BLINK else ACTIVITY_EXERCISE
+        return ACTIVITY_REST if event.exercise == EXERCISE_REST else ACTIVITY_EXERCISE
     return event.activity
 
 

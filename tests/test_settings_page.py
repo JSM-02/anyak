@@ -6,9 +6,7 @@ from PySide6.QtGui import QColor, QWheelEvent
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication, QLabel
 
-from eyeexercise.core.exercises import blink_seconds_for_cycles
 from eyeexercise.core.settings import (
-    BLINK_SECONDS_RANGE,
     DOT_FOLLOW_SECONDS_RANGE,
     IDLE_PAUSE_MINUTES_RANGE,
     IDLE_RESET_MINUTES_RANGE,
@@ -30,11 +28,6 @@ def make_page(qapp, settings=None, save=None):
     page.show()
     qapp.processEvents()
     return page, manager, saved
-
-
-def blink_on():
-    """깜빡임을 켠 설정. 깜빡임은 기본 꺼짐이라 깜빡임 입력칸을 시험할 때 쓴다."""
-    return SettingsManager(Settings()).update({"exercises.blink.enabled": True}).settings
 
 
 def label_text(page, name):
@@ -66,8 +59,6 @@ def test_입력칸은_현재_설정_값으로_채워진다(qapp):
     assert page.control("snooze_minutes").value() == 5
     assert page.control("idle_pause_minutes").value() == 1
     assert page.control("idle_reset_minutes").value() == 5
-    assert not page.control("exercises.blink.enabled").isChecked()  # 깜빡임은 기본 꺼짐
-    assert page.control("exercises.blink.duration_seconds").value() == 5  # 36초 = 깜빡임 5회
     assert page.control("exercises.daily_goal").value() == 2
     assert page.control("exercises.dot_follow.enabled").isChecked()
     assert page.control("exercises.dot_follow.duration_seconds").value() == 6  # 60초 = 10초 단위로 6칸
@@ -100,18 +91,10 @@ def test_입력_범위는_설정_모델의_범위와_같다(qapp):
         assert (spin.minimum(), spin.maximum()) == (low, high), path
 
 
-def test_깜빡임_횟수_범위는_설정_시간_범위_안이다(qapp):
-    page, _, _ = make_page(qapp)
-    blink = page.control("exercises.blink.duration_seconds")
-    assert (blink.minimum(), blink.maximum()) == (1, 15)
-    assert BLINK_SECONDS_RANGE[0] <= blink_seconds_for_cycles(blink.minimum())
-    assert blink_seconds_for_cycles(blink.maximum()) <= BLINK_SECONDS_RANGE[1]  # 15회 = 96초, 보정되어 어긋나지 않는다
-
 
 def test_단위가_입력칸에_붙어_있다(qapp):
     page, _, _ = make_page(qapp)
     assert page.control("interval_minutes").suffix() == " 분"
-    assert page.control("exercises.blink.duration_seconds").suffix() == "회"
 
 
 def test_속도는_분할_버튼으로_고른다(qapp):
@@ -138,14 +121,13 @@ def test_숫자를_바꾸면_바로_저장된다(qapp):
         ("snooze_minutes", 10, lambda s: s.snooze_minutes),
         ("idle_pause_minutes", 2, lambda s: s.idle_pause_minutes),
         ("idle_reset_minutes", 10, lambda s: s.idle_reset_minutes),
-        ("exercises.blink.duration_seconds", 15, lambda s: s.exercises.blink.duration_seconds),
         ("exercises.dot_follow.duration_seconds", 12, lambda s: s.exercises.dot_follow.duration_seconds),
     ],
 )
 def test_숫자_입력칸_모두_설정에_반영된다(qapp, path, value, read):
     page, manager, _ = make_page(qapp)
     page.control(path).setValue(value)
-    expected = {"exercises.blink.duration_seconds": 96, "exercises.dot_follow.duration_seconds": 120}.get(path, value)  # 15회=96초, 12칸=120초
+    expected = {"exercises.dot_follow.duration_seconds": 120}.get(path, value)  # 12칸=120초
     assert read(manager.settings) == expected
 
 
@@ -153,11 +135,10 @@ def test_체크박스를_바꾸면_반영된다(qapp):
     page, manager, _ = make_page(qapp)
     page.control("sound.enabled").setChecked(False)
     page.control("show_main_window_on_start").setChecked(True)
-    page.control("exercises.blink.enabled").setChecked(False)
     page.control("exercises.dot_follow.enabled").setChecked(False)
     s = manager.settings
     assert not s.sound.enabled and s.show_main_window_on_start
-    assert not s.exercises.blink.enabled and not s.exercises.dot_follow.enabled
+    assert not s.exercises.dot_follow.enabled
 
 
 def test_속도를_고르면_반영된다(qapp):
@@ -195,9 +176,9 @@ def test_화면이_입력칸을_다시_채워도_저장하지_않는다(qapp):
 
 def test_다른_곳에서_설정이_바뀌면_화면이_따라간다(qapp):
     page, manager, _ = make_page(qapp)
-    manager.update({"snooze_minutes": 15, "exercises.blink.enabled": False, "exercises.dot_follow.speed": "slow"})
+    manager.update({"snooze_minutes": 15, "exercises.dot_follow.enabled": False, "exercises.dot_follow.speed": "slow"})
     assert page.control("snooze_minutes").value() == 15
-    assert not page.control("exercises.blink.enabled").isChecked()
+    assert not page.control("exercises.dot_follow.enabled").isChecked()
     assert page.control("exercises.dot_follow.speed").currentData() == "slow"
 
 
@@ -259,10 +240,6 @@ def test_키보드로_슬라이더를_움직이면_바로_반영한다(qapp):
 
 def test_슬라이더_값_표시는_사람이_세는_말이고_바뀐_값을_따라간다(qapp):
     page, _, _ = make_page(qapp)
-    blink = page.control("exercises.blink.duration_seconds")
-    assert blink.value_label.text() == "5회"  # 36초가 아니라 5회
-    blink.setValue(15)
-    assert blink.value_label.text() == "15회"
     dot = page.control("exercises.dot_follow.duration_seconds")
     assert dot.value_label.text() == "1분"
     dot.setValue(9)
@@ -280,8 +257,8 @@ def _wheel(widget):
 
 
 def test_포커스가_없으면_마우스_휠로_값이_바뀌지_않는다(qapp):
-    page, manager, saved = make_page(qapp, blink_on())
-    for path in ("interval_minutes", "exercises.blink.duration_seconds", "idle_reset_minutes"):
+    page, manager, saved = make_page(qapp)
+    for path in ("interval_minutes", "exercises.dot_follow.duration_seconds", "idle_reset_minutes"):
         slider = page.control(path).slider
         slider.clearFocus()
         before = manager.settings
@@ -304,19 +281,6 @@ def test_슬라이더에_포커스가_있으면_휠로_값을_바꿀_수_있다(
 # ---- 설명 문구 ----
 
 
-def test_깜빡임_설명은_걸리는_시간을_분과_초로_보여_준다(qapp):
-    page, _, _ = make_page(qapp)
-    hint = page._hints["blink_hint"]
-    assert hint.text() == "준비·마무리 포함 약 36초"
-    page.control("exercises.blink.duration_seconds").setValue(4)  # 4회 → 6 + 24 = 30초
-    assert "약 30초" in hint.text()
-
-
-def test_깜빡임_횟수를_가장_적게_하면_한_사이클이다(qapp):
-    page, manager, _ = make_page(qapp)
-    page.control("exercises.blink.duration_seconds").setValue(1)
-    assert manager.settings.exercises.blink.duration_seconds == 12
-    assert "약 12초" in page._hints["blink_hint"].text()
 
 
 def test_점_따라가기_설명은_걸리는_시간만_짧게_보여_준다(qapp):
@@ -330,23 +294,19 @@ def test_점_따라가기_설명은_걸리는_시간만_짧게_보여_준다(qap
 
 
 def test_운동을_끄면_그_운동의_시간과_속도_입력칸이_꺼진다(qapp):
-    page, _, _ = make_page(qapp, blink_on())
+    page, _, _ = make_page(qapp)
+    assert page.control("exercises.dot_follow.duration_seconds").isEnabled()
     page.control("exercises.dot_follow.enabled").setChecked(False)
     assert not page.control("exercises.dot_follow.duration_seconds").isEnabled()
     assert not page.control("exercises.dot_follow.speed").isEnabled()
-    assert page.control("exercises.blink.duration_seconds").isEnabled()  # 다른 운동은 그대로
-    page.control("exercises.blink.enabled").setChecked(False)
-    assert not page.control("exercises.blink.duration_seconds").isEnabled()
-    page.control("exercises.blink.enabled").setChecked(True)
-    assert page.control("exercises.blink.duration_seconds").isEnabled()
+    page.control("exercises.dot_follow.enabled").setChecked(True)
+    assert page.control("exercises.dot_follow.duration_seconds").isEnabled()
 
 
 def test_점_따라가기를_끄면_안내가_보이고_다시_켜면_사라진다(qapp):
     page, _, _ = make_page(qapp)
     warning = label_text(page, "warning")
     assert warning.isHidden() and warning.text() == EXERCISE_OFF_MESSAGE
-    page.control("exercises.blink.enabled").setChecked(False)
-    assert warning.isHidden()  # 깜빡임을 꺼도 휴식은 먼 곳 바라보기로 계속된다
     page.control("exercises.dot_follow.enabled").setChecked(False)
     assert not warning.isHidden()
     page.control("exercises.dot_follow.enabled").setChecked(True)
@@ -355,9 +315,9 @@ def test_점_따라가기를_끄면_안내가_보이고_다시_켜면_사라진�
 
 def test_꺼진_상태로_시작해도_입력칸이_꺼져_있다(qapp):
     manager = SettingsManager(Settings())
-    manager.update({"exercises.blink.enabled": False})
+    manager.update({"exercises.dot_follow.enabled": False})
     page = SettingsPage(manager)
-    assert not page.control("exercises.blink.duration_seconds").isEnabled()
+    assert not page.control("exercises.dot_follow.duration_seconds").isEnabled()
 
 
 # ---- 저장 실패 ----
@@ -403,8 +363,8 @@ def test_저장할_것이_없는_변경은_안내를_바꾸지_않는다(qapp):
 def test_위젯_종류(qapp):
     page, _, _ = make_page(qapp)
     kinds = {
-        LabeledSlider: ["interval_minutes", "snooze_minutes", "idle_pause_minutes", "idle_reset_minutes", "exercises.blink.duration_seconds", "exercises.dot_follow.duration_seconds", "exercises.daily_goal"],
-        Switch: ["exercises.blink.enabled", "exercises.dot_follow.enabled", "sound.enabled", "show_main_window_on_start"],
+        LabeledSlider: ["interval_minutes", "snooze_minutes", "idle_pause_minutes", "idle_reset_minutes", "exercises.dot_follow.duration_seconds", "exercises.daily_goal"],
+        Switch: ["exercises.dot_follow.enabled", "sound.enabled", "show_main_window_on_start"],
         Segmented: ["exercises.dot_follow.speed", "appearance"],
     }
     for kind, paths in kinds.items():
@@ -416,7 +376,7 @@ def test_위젯_종류(qapp):
 def test_섹션_제목이_보인다(qapp):
     page, _, _ = make_page(qapp)
     titles = [lbl.text() for lbl in page.findChildren(QLabel) if lbl.objectName() == "sectionTitle"]
-    assert titles == ["눈 휴식", "눈 운동", "화면", "소리와 시작", "휴식·운동 세부", "알림 세부", "자리 비움"]  # 앞의 넷이 기본, 뒤의 셋은 고급
+    assert titles == ["눈 휴식", "눈 운동", "화면", "소리와 시작", "운동 세부", "알림 세부", "자리 비움"]  # 앞의 넷이 기본, 뒤의 셋은 고급
 
 
 def test_보정한_결과가_이전_값과_같아도_입력칸은_보정된_값으로_돌아온다(qapp):
@@ -472,12 +432,12 @@ def test_경고와_저장_실패_안내는_색이_있는_글자로_보인다(qap
 
 
 def test_꺼진_운동의_슬라이더_값은_옅게_보인다(qapp):
-    page, _, _ = make_page(qapp, blink_on())
+    page, _, _ = make_page(qapp)
     page._advanced_toggle.click()  # 고급 설정을 펼친다
     qapp.processEvents()
-    value = page.control("exercises.blink.duration_seconds").value_label
+    value = page.control("exercises.dot_follow.duration_seconds").value_label
     before = min(label_pixels(page, value), key=lambda c: c.lightness())
-    page.control("exercises.blink.enabled").setChecked(False)
+    page.control("exercises.dot_follow.enabled").setChecked(False)
     qapp.processEvents()
     after = min(label_pixels(page, value), key=lambda c: c.lightness())
     assert after.lightness() > before.lightness()
@@ -490,25 +450,24 @@ def test_운동_길이는_짧게_보통_길게_중_보통이_선택돼_있다(qa
     buttons = page.preset_control.buttons()
     assert [b.text() for b in buttons] == ["짧게", "보통", "길게"]
     assert [b.isChecked() for b in buttons] == [False, True, False]
-    assert page._hints["preset_hint"].text() == "깜빡임 5회 · 점 따라가기 1분"
+    assert page._hints["preset_hint"].text() == "점 따라가기 1분"
 
 
-def test_짧게를_고르면_두_운동의_길이가_함께_줄어든다(qapp):
+def test_짧게를_고르면_점_따라가기_길이가_줄어든다(qapp):
     page, manager, saved = make_page(qapp)
     page.preset_control.buttons()[0].click()
-    assert manager.settings.exercises.blink.duration_seconds == 24 and manager.settings.exercises.dot_follow.duration_seconds == 30
+    assert manager.settings.exercises.dot_follow.duration_seconds == 30
     assert len(saved) == 1  # 한 번에 저장한다
     assert [b.isChecked() for b in page.preset_control.buttons()] == [True, False, False]
-    assert page._hints["preset_hint"].text() == "깜빡임 3회 · 점 따라가기 30초"
-    assert page.control("exercises.blink.duration_seconds").value() == 3  # 고급 슬라이더도 따라간다
+    assert page._hints["preset_hint"].text() == "점 따라가기 30초"
     assert page.control("exercises.dot_follow.duration_seconds").value() == 3
 
 
-def test_길게를_고르면_두_운동의_길이가_함께_늘어난다(qapp):
+def test_길게를_고르면_점_따라가기_길이가_늘어난다(qapp):
     page, manager, _ = make_page(qapp)
     page.preset_control.buttons()[2].click()
-    assert manager.settings.exercises.blink.duration_seconds == 66 and manager.settings.exercises.dot_follow.duration_seconds == 90
-    assert page._hints["preset_hint"].text() == "깜빡임 10회 · 점 따라가기 1분 30초"
+    assert manager.settings.exercises.dot_follow.duration_seconds == 90
+    assert page._hints["preset_hint"].text() == "점 따라가기 1분 30초"
 
 
 def test_이미_고른_길이를_다시_눌러도_저장하지_않는다(qapp):
@@ -519,40 +478,33 @@ def test_이미_고른_길이를_다시_눌러도_저장하지_않는다(qapp):
 
 def test_고급_설정에서_길이를_따로_정하면_아무것도_선택되지_않고_안내가_나온다(qapp):
     page, manager, _ = make_page(qapp)
-    page.control("exercises.blink.duration_seconds").setValue(7)  # 깜빡임 7회
+    page.control("exercises.dot_follow.duration_seconds").setValue(7)  # 1분 10초
     assert [b.isChecked() for b in page.preset_control.buttons()] == [False, False, False]
     assert page._hints["preset_hint"].text() == "고급 설정에서 운동마다 따로 정한 길이를 쓰고 있어요."
     page.preset_control.buttons()[1].click()  # 보통을 고르면 다시 맞춰진다
-    assert manager.settings.exercises.blink.duration_seconds == 36
+    assert manager.settings.exercises.dot_follow.duration_seconds == 60
     assert [b.isChecked() for b in page.preset_control.buttons()] == [False, True, False]
 
-
-def test_점_따라가기_시간만_바꿔도_프리셋은_풀린다(qapp):
-    page, _, _ = make_page(qapp)
-    page.control("exercises.dot_follow.duration_seconds").setValue(7)  # 1분 10초
-    assert [b.isChecked() for b in page.preset_control.buttons()] == [False, False, False]
 
 
 def test_길이_선택은_운동을_꺼도_켜져_있다(qapp):
     page, _, _ = make_page(qapp)
     assert page.preset_control.isEnabled()
-    page.control("exercises.blink.enabled").setChecked(False)
     page.control("exercises.dot_follow.enabled").setChecked(False)
-    assert page.preset_control.isEnabled()  # 휴식은 깜빡임 없이도 계속된다
+    assert page.preset_control.isEnabled()
 
 
-def test_한_운동을_꺼도_길이_선택은_두_운동에_저장된다(qapp):
+def test_점_따라가기를_꺼도_길이_선택은_저장된다(qapp):
     page, manager, _ = make_page(qapp)
     page.control("exercises.dot_follow.enabled").setChecked(False)
     page.preset_control.buttons()[2].click()
-    assert manager.settings.exercises.blink.duration_seconds == 66 and manager.settings.exercises.dot_follow.duration_seconds == 90
+    assert manager.settings.exercises.dot_follow.duration_seconds == 90
 
 
 def test_설정_파일에_들어_있는_어긋난_값도_화면에_이상하게_나오지_않는다(qapp):
     manager = SettingsManager(Settings())
-    manager.update({"exercises.blink.duration_seconds": 70, "exercises.dot_follow.duration_seconds": 65})
+    manager.update({"exercises.dot_follow.duration_seconds": 65})
     page = SettingsPage(manager)
-    assert page.control("exercises.blink.duration_seconds").value_label.text() == "10회"  # 70초 = 10회(남는 시간은 마지막 쉬기)
     assert page.control("exercises.dot_follow.duration_seconds").value_label.text() == "1분 10초"  # 65초는 가까운 칸으로 보인다
     assert manager.settings.exercises.dot_follow.duration_seconds == 65  # 화면을 열기만 해서는 값을 바꾸지 않는다
 
@@ -569,8 +521,8 @@ def test_점_따라가기_시간은_10초에서_2분까지다(qapp):
 
 # ---- 고급 설정은 접혀 있다 ----
 
-BASIC_PATHS = ["interval_minutes", "exercises.blink.enabled", "exercises.dot_follow.enabled", "exercises.daily_goal", "appearance", "sound.enabled", "show_main_window_on_start"]
-ADVANCED_PATHS = ["snooze_minutes", "idle_pause_minutes", "idle_reset_minutes", "exercises.blink.duration_seconds", "exercises.dot_follow.duration_seconds", "exercises.dot_follow.speed"]
+BASIC_PATHS = ["interval_minutes", "exercises.dot_follow.enabled", "exercises.daily_goal", "appearance", "sound.enabled", "show_main_window_on_start"]
+ADVANCED_PATHS = ["snooze_minutes", "idle_pause_minutes", "idle_reset_minutes", "exercises.dot_follow.duration_seconds", "exercises.dot_follow.speed"]
 
 
 def test_처음에는_기본_설정만_보이고_고급_설정은_접혀_있다(qapp):
@@ -644,7 +596,7 @@ def test_고급_설정을_펼쳐도_초로만_말하지_않는다(qapp):
     page._advanced_toggle.click()
     texts = " ".join(all_texts(page))
     assert long_seconds(page) == []
-    assert "5회" in texts and "36초" in texts  # 횟수와 분·초로 말한다
+    assert "1분" in texts  # 분·초로 말한다
 
 
 def test_모든_프리셋에서도_60초가_넘는_값을_초로만_말하지_않는다(qapp):

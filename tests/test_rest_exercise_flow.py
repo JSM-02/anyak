@@ -8,7 +8,6 @@ from PySide6.QtWidgets import QPushButton
 from test_exercise_window import FakeElapsed
 from test_settings_runtime import make_app
 
-from eyeexercise.core.exercises import LookAwayTimeline, Phase, blink_timeline
 from eyeexercise.core.history import ACTIVITY_EXERCISE, ACTIVITY_REST, History
 from eyeexercise.core.scheduler import ReminderScheduler, State
 from eyeexercise.core.settings import Settings
@@ -116,24 +115,9 @@ def test_알림이_뜨면_목표를_채우지_못했을_때만_운동을_제안�
     tray_app.popup.hide()
 
 
-def blink_on(tray_app):
-    tray_app.settings_manager.update({"exercises.blink.enabled": True})
 
-
-def test_깜빡임을_켜면_휴식은_깜빡임과_먼_곳_바라보기_창이_뜬다(qapp, tmp_path, monkeypatch):
+def test_휴식은_창_없이_팝업_안의_20초_카운트다운이다(qapp, tmp_path, monkeypatch):
     tray_app, _ = make_app(qapp, tmp_path, monkeypatch)
-    blink_on(tray_app)
-    tray_app.controller.reminder_due.emit()
-    tray_app.popup.start_clicked.emit()
-    window = tray_app.exercise_window
-    assert window.isVisible() and window._tag.text() == "눈 휴식"
-    assert window._timeline.exercise == "blink" and window._timeline.total_seconds == 36  # 5회
-    assert not tray_app.popup.isVisible() and not tray_app.popup.counting  # 팝업은 닫힌다
-    window.close()
-
-
-def test_깜빡임이_꺼져_있으면_휴식은_창_없이_팝업_안의_20초_카운트다운이다(qapp, tmp_path, monkeypatch):
-    tray_app, _ = make_app(qapp, tmp_path, monkeypatch)  # 깜빡임은 기본 꺼짐
     tray_app.popup._elapsed = FakeElapsed()
     tray_app.controller.reminder_due.emit()
     tray_app.popup.start_clicked.emit()
@@ -225,13 +209,13 @@ def test_점_따라가기를_끄면_운동은_시작되지_않고_안내만_한�
     assert tray_app.controller.state is State.RUNNING and tray_app.controller.activity is None
 
 
-def test_휴식을_마치면_깜빡임으로_운동을_마치면_점_따라가기로_기록한다(qapp, tmp_path, monkeypatch):
+def test_휴식을_마치면_휴식으로_운동을_마치면_점_따라가기로_기록한다(qapp, tmp_path, monkeypatch):
     tray_app, _ = make_app(qapp, tmp_path, monkeypatch)
     tray_app.controller.start_rest()
-    tray_app.exercise_window.completed.emit("blink", 24)
+    tray_app.exercise_window.completed.emit("blink", 20)  # 휴식은 기록에서 "blink"라는 옛 이름을 그대로 쓴다
     tray_app.controller.start_exercise()
     tray_app.exercise_window.completed.emit("dot_follow", 60)
-    assert [(e.exercise, e.duration_seconds) for e in tray_app.history.events] == [("blink", 24), ("dot_follow", 60)]
+    assert [(e.exercise, e.duration_seconds) for e in tray_app.history.events] == [("blink", 20), ("dot_follow", 60)]
     tray_app.exercise_window.close()
 
 
@@ -256,7 +240,7 @@ def test_트레이_안내_문구는_휴식_기준이다(qapp, tmp_path, monkeypa
     assert tray._status_text(State.DUE) == "눈 쉬는 시간이에요"
     tray_app.controller.start_rest()
     assert tray._status_text(State.EXERCISING) == "눈 쉬는 중"
-    tray_app.popup.hide()  # 팝업 안의 20초를 멈춘다(깜빡임이 꺼져 있어 휴식은 팝업 안에서 한다)
+    tray_app.popup.hide()  # 팝업 안의 20초를 멈춘다(휴식은 팝업 안에서 한다)
     tray_app.controller.start_exercise()
     assert tray._status_text(State.EXERCISING) == "눈 운동 중"
     tray_app.exercise_window.close()
@@ -272,29 +256,10 @@ def make_window():
     return window
 
 
-def test_운동_창은_휴식과_운동의_이름표를_보여_준다(qapp):
-    window = make_window()
-    window.start(blink_timeline(24))
-    assert window._tag.text() == "눈 휴식"
-    window.close()
+def test_운동_창은_눈_운동_이름표를_보여_준다(qapp):
     from eyeexercise.core.exercises import dot_follow_timeline
 
     window = make_window()
     window.start(dot_follow_timeline(60))
     assert window._tag.text() == "눈 운동"
     window.close()
-
-
-def test_먼_곳_바라보기만_하는_휴식은_눈을_보이고_바로_완료로_센다(qapp):
-    window = make_window()
-    events = []
-    window.completed.connect(lambda exercise, seconds: events.append((exercise, seconds)))
-    window.start(LookAwayTimeline())
-    assert not window._eye.isHidden() and window._dots.isHidden()
-    window._on_frame()
-    assert events == [("blink", 0)]
-    assert window._message.text().startswith("먼 곳을 바라보세요")
-    window._elapsed.ms = 20_000
-    window._on_frame()
-    assert not window.isVisible()  # 20초가 지나면 저절로 닫힌다
-    assert window._last_phase is Phase.LOOK_AWAY

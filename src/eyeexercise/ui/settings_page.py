@@ -1,7 +1,7 @@
 """설정 화면. 값을 바꾸는 즉시 저장하고 실행 중인 앱에 반영한다.
 
 처음에는 꼭 필요한 것만 보여 주고(알림 주기, 운동 켜기/끄기, 운동 길이, 소리, 시작 방식),
-세부 값은 접어 둔 '고급 설정'에 둔다. 값은 사람이 세는 말로 보여 준다 (66초 대신 깜빡임 10회, 짧게/보통/길게).
+세부 값은 접어 둔 '고급 설정'에 둔다. 값은 사람이 세는 말로 보여 준다 (66초 대신 약 1분, 짧게/보통/길게).
 
 값의 보정·저장·알림은 core의 SettingsManager가 한다. 이 모듈은 입력 컨트롤을 그리고, 바뀐 값을 넘기고,
 돌려받은 (보정된) 설정으로 컨트롤을 다시 채우기만 한다.
@@ -16,15 +16,11 @@ from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QLayout, QPushButton,
 from eyeexercise.core.autostart import AutoStart
 from eyeexercise.core.exercises import (
     LENGTH_PRESETS,
-    blink_cycles_for_seconds,
-    blink_seconds_for_cycles,
-    blink_timeline,
     current_preset,
     dot_follow_timeline,
     preset_changes,
 )
 from eyeexercise.core.settings import (
-    BLINK_SECONDS_RANGE,
     DAILY_GOAL_RANGE,
     DOT_FOLLOW_SECONDS_RANGE,
     IDLE_PAUSE_MINUTES_RANGE,
@@ -134,7 +130,6 @@ class SettingsPage(QWidget):
             "눈 휴식",
             [
                 self._slider("interval_minutes", "휴식 주기", "이 시간마다 눈을 쉬게 해 줘요. 먼 곳을 20초 바라봐요.", INTERVAL_MINUTES_RANGE, " 분", 5),
-                self._switch("exercises.blink.enabled", "깜빡임", "휴식 때 눈을 천천히 감았다 뜨는 깜빡임도 함께 해요. 끄면 먼 곳 바라보기만 해요."),
             ],
         )
         self._add_section(
@@ -158,7 +153,7 @@ class SettingsPage(QWidget):
             body,
             "소리와 시작",
             [
-                self._switch("sound.enabled", "소리 안내", "운동 중 효과음으로 단계를 알려 주고, 알림이 뜰 때 부드러운 소리가 나요."),
+                self._switch("sound.enabled", "소리 안내", "알림이 뜰 때와 운동·휴식 단계마다 부드러운 소리로 알려 줘요."),
                 self._switch("show_main_window_on_start", "시작할 때 창 보이기", "끄면 트레이에서만 조용히 시작해요."),
                 self._autostart_row(),
             ],
@@ -177,19 +172,8 @@ class SettingsPage(QWidget):
         advanced_layout.setSpacing(10)
         self._add_section(
             advanced_layout,
-            "휴식·운동 세부",
+            "운동 세부",
             [
-                self._slider(
-                    "exercises.blink.duration_seconds",
-                    "휴식의 깜빡임 횟수",
-                    "",
-                    (1, blink_cycles_for_seconds(BLINK_SECONDS_RANGE[1])),
-                    "회",
-                    5,
-                    hint_key="blink_hint",
-                    to_ui=blink_cycles_for_seconds,
-                    to_setting=blink_seconds_for_cycles,
-                ),
                 self._slider(
                     "exercises.dot_follow.duration_seconds",
                     "점 따라가기 시간",
@@ -364,7 +348,7 @@ class SettingsPage(QWidget):
         return self._row("화면 모드", "시스템 설정을 고르면 Windows의 앱 모드를 따라가요.", segmented)
 
     def _length_row(self) -> QWidget:
-        """길이: 짧게 / 보통 / 길게. 휴식의 깜빡임 횟수와 운동 시간이 함께 바뀐다."""
+        """길이: 짧게 / 보통 / 길게. 점 따라가기 시간이 바뀐다."""
         preset = Segmented([(p.label, p.key) for p in LENGTH_PRESETS])
         preset.changed.connect(lambda key: self._changed(preset_changes(key)))
         self._preset = preset
@@ -416,9 +400,7 @@ class SettingsPage(QWidget):
                     widget.setChecked(value)
                 elif isinstance(widget, Segmented):
                     widget.setCurrentData(value)
-            blink_on = settings.exercises.blink.enabled
             dot_on = settings.exercises.dot_follow.enabled
-            self._controls["exercises.blink.duration_seconds"].setEnabled(blink_on)
             self._controls["exercises.dot_follow.duration_seconds"].setEnabled(dot_on)
             self._controls["exercises.dot_follow.speed"].setEnabled(dot_on)
             self._controls["exercises.daily_goal"].setEnabled(dot_on)
@@ -438,8 +420,6 @@ class SettingsPage(QWidget):
             "snooze_minutes": settings.snooze_minutes,
             "idle_pause_minutes": settings.idle_pause_minutes,
             "idle_reset_minutes": settings.idle_reset_minutes,
-            "exercises.blink.enabled": ex.blink.enabled,
-            "exercises.blink.duration_seconds": ex.blink.duration_seconds,
             "exercises.dot_follow.enabled": ex.dot_follow.enabled,
             "exercises.dot_follow.duration_seconds": ex.dot_follow.duration_seconds,
             "exercises.dot_follow.speed": ex.dot_follow.speed,
@@ -451,15 +431,13 @@ class SettingsPage(QWidget):
 
     def _update_hints(self, settings: Settings) -> None:
         ex = settings.exercises
-        blink = blink_timeline(ex.blink.duration_seconds)
         dot = dot_follow_timeline(ex.dot_follow.duration_seconds, ex.dot_follow.speed)
         key = current_preset(ex)
         if key is None:
             self._set_hint("preset_hint", CUSTOM_LENGTH_MESSAGE)
         else:
             preset = next(p for p in LENGTH_PRESETS if p.key == key)
-            self._set_hint("preset_hint", f"깜빡임 {preset.blink_cycles}회 · 점 따라가기 {format_duration(preset.dot_seconds)}")
-        self._set_hint("blink_hint", f"준비·마무리 포함 약 {format_duration(blink.total_seconds)}")
+            self._set_hint("preset_hint", f"점 따라가기 {format_duration(preset.dot_seconds)}")
         self._set_hint("dot_hint", f"준비·마무리 포함 약 {format_duration(dot.total_seconds)}")
 
     def _set_hint(self, key: str, text: str) -> None:

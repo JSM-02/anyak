@@ -51,8 +51,8 @@ def test_설정_화면을_만드는_동안_작은_창이_뜨지_않는다(qapp, 
 def test_설정을_바꾸고_화면이_다시_채워지는_동안에도_작은_창이_뜨지_않는다(qapp, spy):
     manager = SettingsManager(Settings())
     page = SettingsPage(manager)
-    manager.update({"exercises.blink.enabled": False, "exercises.dot_follow.enabled": False, "interval_minutes": 30})
-    manager.update({"exercises.blink.enabled": True})
+    manager.update({"exercises.dot_follow.enabled": False, "interval_minutes": 30})
+    manager.update({"exercises.dot_follow.enabled": True})
     qapp.processEvents()
     assert spy.windows == []
 
@@ -122,7 +122,7 @@ def test_고급_설정을_펼치고_접는_동안에도_작은_창이_뜨지_않
     for _ in range(3):
         page._advanced_toggle.click()
     page.preset_control.buttons()[0].click()
-    page.control("exercises.blink.duration_seconds").setValue(7)
+    page.control("exercises.dot_follow.duration_seconds").setValue(7)
     qapp.processEvents()
     assert spy.windows == []
 

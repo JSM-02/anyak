@@ -12,15 +12,8 @@ INTERVAL_MINUTES_RANGE = (1, 120)
 SNOOZE_MINUTES_RANGE = (1, 60)
 IDLE_PAUSE_MINUTES_RANGE = (1, 59)
 IDLE_RESET_MINUTES_RANGE = (2, 120)
-BLINK_SECONDS_RANGE = (12, 96)  # 깜빡임 1~15회 (준비 3 + 사이클 6초 × 횟수 + 마무리 3)
 DOT_FOLLOW_SECONDS_RANGE = (10, 120)  # 10초~2분
 DAILY_GOAL_RANGE = (0, 5)  # 하루 눈 운동 목표 횟수. 0이면 운동을 제안하지 않는다
-
-
-@dataclass(frozen=True)
-class BlinkSettings:
-    enabled: bool = False  # 기본은 꺼짐: 휴식은 팝업에서 20초 먼 곳 바라보기만 한다. 켜면 그 앞에 깜빡임 운동이 붙는다
-    duration_seconds: int = 36  # 준비 3 + 사이클 5회(6초씩) + 마무리 3. 눈 '휴식'의 깜빡임 부분이다
 
 
 @dataclass(frozen=True)
@@ -32,7 +25,6 @@ class DotFollowSettings:
 
 @dataclass(frozen=True)
 class ExercisesSettings:
-    blink: BlinkSettings = field(default_factory=BlinkSettings)  # 눈 휴식(깜빡임 + 먼 곳 바라보기). enabled가 꺼지면 먼 곳 바라보기만 한다
     dot_follow: DotFollowSettings = field(default_factory=DotFollowSettings)  # 눈 운동
     daily_goal: int = 2  # 하루 눈 운동 목표 횟수
 
@@ -86,7 +78,6 @@ def settings_from_dict(data: Any) -> Settings:
     d = Settings()
     raw = _as_dict(data)
     raw_ex = _as_dict(raw.get("exercises"))
-    raw_blink = _as_dict(raw_ex.get("blink"))
     raw_dot = _as_dict(raw_ex.get("dot_follow"))
     raw_sound = _as_dict(raw.get("sound"))
 
@@ -103,12 +94,6 @@ def settings_from_dict(data: Any) -> Settings:
         idle_reset_minutes=idle_reset,
         exercises=ExercisesSettings(
             daily_goal=_int(raw_ex.get("daily_goal"), d.exercises.daily_goal, DAILY_GOAL_RANGE),
-            blink=BlinkSettings(
-                enabled=_bool(raw_blink.get("enabled"), d.exercises.blink.enabled),
-                duration_seconds=_int(
-                    raw_blink.get("duration_seconds"), d.exercises.blink.duration_seconds, BLINK_SECONDS_RANGE
-                ),
-            ),
             dot_follow=DotFollowSettings(
                 enabled=_bool(raw_dot.get("enabled"), d.exercises.dot_follow.enabled),
                 duration_seconds=_int(
@@ -134,10 +119,6 @@ def settings_to_dict(settings: Settings) -> dict:
         "idle_reset_minutes": settings.idle_reset_minutes,
         "exercises": {
             "daily_goal": settings.exercises.daily_goal,
-            "blink": {
-                "enabled": settings.exercises.blink.enabled,
-                "duration_seconds": settings.exercises.blink.duration_seconds,
-            },
             "dot_follow": {
                 "enabled": settings.exercises.dot_follow.enabled,
                 "duration_seconds": settings.exercises.dot_follow.duration_seconds,
@@ -151,10 +132,10 @@ def settings_to_dict(settings: Settings) -> dict:
 
 
 def with_changes(settings: Settings, changes: Mapping[str, Any]) -> Settings:
-    """점으로 이은 경로(예: "interval_minutes", "exercises.blink.enabled")의 값을 바꾼 새 설정을 만든다.
+    """점으로 이은 경로(예: "interval_minutes", "exercises.dot_follow.enabled")의 값을 바꾼 새 설정을 만든다.
 
     값은 파일을 읽을 때와 같은 규칙으로 보정된다 (범위, 잘못된 타입, 정지 기준 < 초기화 기준).
-    없는 경로, `version`, 항목 묶음 전체(예: "exercises.blink")를 바꾸려 하면 KeyError다. 오타가 조용히 무시되지 않게 하려는 것이다.
+    없는 경로, `version`, 항목 묶음 전체(예: "exercises.dot_follow")를 바꾸려 하면 KeyError다. 오타가 조용히 무시되지 않게 하려는 것이다.
     """
     data = settings_to_dict(settings)
     for path, value in changes.items():

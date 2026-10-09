@@ -28,19 +28,18 @@ class FakeTts:
 def test_음성은_안내가_있는_단계만_말한다():
     tts = FakeTts()
     speaker = TtsSpeaker(tts)
-    speaker.cue(Phase.HOLD)
-    speaker.cue(Phase.REST)
+    speaker.cue(Phase.TRACK)  # 점을 따라가는 동안은 말하지 않는다
     assert tts.calls == []
-    speaker.cue(Phase.CLOSE)
-    assert tts.calls == [("stop",), ("say", SPOKEN[Phase.CLOSE])]
+    speaker.cue(Phase.PREPARE)
+    assert tts.calls == [("stop",), ("say", SPOKEN[Phase.PREPARE])]
 
 
 def test_음성은_앞_안내를_끊고_새_안내를_말한다():
     tts = FakeTts()
     speaker = TtsSpeaker(tts)
-    speaker.cue(Phase.CLOSE)
-    speaker.cue(Phase.OPEN)
-    assert [c for c in tts.calls if c[0] == "say"] == [("say", "눈을 감으세요"), ("say", "눈을 뜨세요")]
+    speaker.cue(Phase.PREPARE)
+    speaker.cue(Phase.FINISH)
+    assert [c for c in tts.calls if c[0] == "say"] == [("say", SPOKEN[Phase.PREPARE]), ("say", SPOKEN[Phase.FINISH])]
     assert tts.calls[2] == ("stop",)
 
 
@@ -50,16 +49,15 @@ def test_음성_stop은_엔진을_멈춘다():
     assert tts.calls == [("stop",)]
 
 
-def test_알림음은_감을_때_낮고_뜰_때_높다():
-    assert BEEP_HZ[Phase.CLOSE] < BEEP_HZ[Phase.OPEN]
+def test_알림음은_안내가_있는_단계마다_높이가_있다():
+    assert set(BEEP_HZ) == {Phase.PREPARE, Phase.FINISH, Phase.LOOK_AWAY}
 
 
 def test_알림음은_안내가_없는_단계에서는_울리지_않는다(monkeypatch):
     beeps = []
     monkeypatch.setattr(BeepSpeaker, "_beep", staticmethod(lambda freq: beeps.append(freq)))
     speaker = BeepSpeaker()
-    speaker.cue(Phase.HOLD)
-    speaker.cue(Phase.REST)
+    speaker.cue(Phase.TRACK)
     assert beeps == []
 
 
@@ -72,9 +70,9 @@ def test_알림음은_단계별_높이로_울린다(monkeypatch):
         done.set()
 
     monkeypatch.setattr(BeepSpeaker, "_beep", staticmethod(fake_beep))
-    BeepSpeaker().cue(Phase.CLOSE)
+    BeepSpeaker().cue(Phase.PREPARE)
     assert done.wait(2)
-    assert beeps == [BEEP_HZ[Phase.CLOSE]]
+    assert beeps == [BEEP_HZ[Phase.PREPARE]]
 
 
 def test_알림음을_낼_수_없는_환경에서도_예외가_나지_않는다(monkeypatch):
@@ -156,67 +154,40 @@ def make_file_speaker(directory, fallback=None, failed=()):
     return FileSpeaker(directory, fallback, factory), created
 
 
-ALL_FILES = ("prepare", "cycle", "finish", "look_away")
+ALL_FILES = ("prepare", "finish", "look_away")
 
 
-def test_감기_시작에서_사이클_파일을_재생한다(tmp_path):
-    fallback = FakeFallback()
-    speaker, effects = make_file_speaker(make_files(tmp_path, *ALL_FILES), fallback)
-    speaker.cue(Phase.CLOSE)
-    assert sum(e.played for e in effects["cycle"]) == 1
-    assert fallback.cues == []
-
-
-def test_준비_마무리_먼_곳_바라보기도_각자_파일을_재생한다(tmp_path):
+def test_준비_마무리_먼_곳_바라보기는_각자_파일을_재생한다(tmp_path):
     speaker, effects = make_file_speaker(make_files(tmp_path, *ALL_FILES), FakeFallback())
     for phase, name in [(Phase.PREPARE, "prepare"), (Phase.FINISH, "finish"), (Phase.LOOK_AWAY, "look_away")]:
         speaker.cue(phase)
         assert sum(e.played for e in effects[name]) == 1
 
 
-def test_유지_뜨기_쉬기에서는_소리를_내지_않는다_뜨기_종소리는_사이클_파일_안에_있다(tmp_path):
+def test_점을_따라가는_동안에는_소리를_내지_않는다(tmp_path):
     fallback = FakeFallback()
     speaker, effects = make_file_speaker(make_files(tmp_path, *ALL_FILES), fallback)
-    for phase in (Phase.HOLD, Phase.OPEN, Phase.REST):
-        speaker.cue(phase)
-    assert all(e.played == 0 for pool in effects.values() for e in pool)
-    assert fallback.cues == []  # 음성이 "눈을 뜨세요"라고 덧붙이지 않는다
+    speaker.cue(Phase.TRACK)
+    assert all(e.played == 0 for pool in effects.values() for e in pool)  # 대체 음성도 TRACK 문구는 없어 말하지 않는다
 
 
-def test_사이클_파일이_없으면_뜨기도_대체_음성이_맡는다(tmp_path):
-    fallback = FakeFallback()
-    speaker, _ = make_file_speaker(make_files(tmp_path, "prepare", "finish"), fallback)
-    speaker.cue(Phase.CLOSE)
-    speaker.cue(Phase.OPEN)
-    assert fallback.cues == [Phase.CLOSE, Phase.OPEN]
-
-
-def test_사이클_파일이_망가졌으면_뜨기도_대체_음성이_맡는다(tmp_path):
-    fallback = FakeFallback()
-    speaker, effects = make_file_speaker(make_files(tmp_path, *ALL_FILES), fallback, failed={"cycle"})
-    speaker.cue(Phase.CLOSE)
-    speaker.cue(Phase.OPEN)
-    assert all(e.played == 0 for e in effects["cycle"])
-    assert fallback.cues == [Phase.CLOSE, Phase.OPEN]
-
-
-def test_다음_사이클이_시작돼도_앞_소리를_끊지_않고_겹쳐_재생한다(tmp_path):
-    speaker, effects = make_file_speaker(make_files(tmp_path, "cycle"), FakeFallback())
-    speaker.cue(Phase.CLOSE)
-    speaker.cue(Phase.CLOSE)  # 4초 뒤 다음 사이클. 앞 사이클 소리는 아직 울리고 있다
-    first, second = effects["cycle"]
+def test_같은_단계가_이어서_시작돼도_앞_소리를_끊지_않고_겹쳐_재생한다(tmp_path):
+    speaker, effects = make_file_speaker(make_files(tmp_path, "prepare"), FakeFallback())
+    speaker.cue(Phase.PREPARE)
+    speaker.cue(Phase.PREPARE)  # 앞 소리가 아직 울리고 있다
+    first, second = effects["prepare"]
     assert (first.played, second.played) == (1, 1)
     assert first.stopped == 0 and second.stopped == 0
     assert first.playing and second.playing
 
 
 def test_재생기를_번갈아_쓰고_끝난_것을_다시_쓴다(tmp_path):
-    speaker, effects = make_file_speaker(make_files(tmp_path, "cycle"), FakeFallback())
-    first, second = effects["cycle"]
-    speaker.cue(Phase.CLOSE)
-    speaker.cue(Phase.CLOSE)
+    speaker, effects = make_file_speaker(make_files(tmp_path, "prepare"), FakeFallback())
+    first, second = effects["prepare"]
+    speaker.cue(Phase.PREPARE)
+    speaker.cue(Phase.PREPARE)
     first.playing = False  # 첫 소리가 끝났다
-    speaker.cue(Phase.CLOSE)
+    speaker.cue(Phase.PREPARE)
     assert (first.played, second.played) == (2, 1)
 
 
@@ -227,35 +198,35 @@ def test_재생기는_파일마다_둘씩_만든다(tmp_path):
 
 def test_파일이_없는_단계는_대체_음성에_맡긴다(tmp_path):
     fallback = FakeFallback()
-    speaker, effects = make_file_speaker(make_files(tmp_path, "cycle"), fallback)
+    speaker, effects = make_file_speaker(make_files(tmp_path, "prepare"), fallback)
     speaker.cue(Phase.LOOK_AWAY)
     assert fallback.cues == [Phase.LOOK_AWAY]
     assert "look_away" not in effects
 
 
 def test_일부_파일만_있어도_동작한다(tmp_path):
-    speaker, _ = make_file_speaker(make_files(tmp_path, "cycle", "finish"), FakeFallback())
-    assert speaker.phases == {Phase.CLOSE, Phase.FINISH}
+    speaker, _ = make_file_speaker(make_files(tmp_path, "prepare", "finish"), FakeFallback())
+    assert speaker.phases == {Phase.PREPARE, Phase.FINISH}
 
 
 def test_폴더가_없거나_비어_있어도_대체_음성으로_동작한다(tmp_path):
     fallback = FakeFallback()
     speaker, effects = make_file_speaker(tmp_path / "없는폴더", fallback)
-    speaker.cue(Phase.CLOSE)
-    assert effects == {} and fallback.cues == [Phase.CLOSE]
+    speaker.cue(Phase.PREPARE)
+    assert effects == {} and fallback.cues == [Phase.PREPARE]
 
 
 def test_예전_음성_파일_이름은_읽지_않는다(tmp_path):
-    speaker, effects = make_file_speaker(make_files(tmp_path, "close", "open", "hold", "rest"), FakeFallback())
+    speaker, effects = make_file_speaker(make_files(tmp_path, "close", "open", "hold", "rest", "cycle"), FakeFallback())
     assert effects == {} and speaker.phases == set()
 
 
 def test_재생기_하나가_실패해도_나머지로_재생한다(tmp_path):
     fallback = FakeFallback()
-    speaker, effects = make_file_speaker(make_files(tmp_path, "cycle"), fallback)
-    effects["cycle"][0].failed = True
-    speaker.cue(Phase.CLOSE)
-    assert effects["cycle"][1].played == 1 and fallback.cues == []
+    speaker, effects = make_file_speaker(make_files(tmp_path, "prepare"), fallback)
+    effects["prepare"][0].failed = True
+    speaker.cue(Phase.PREPARE)
+    assert effects["prepare"][1].played == 1 and fallback.cues == []
 
 
 def test_파일_재생이_실패하면_대체_음성으로_넘어간다(tmp_path):
@@ -272,29 +243,28 @@ def test_파일_하나를_불러오지_못해도_나머지는_쓴다(tmp_path):
         return FakeEffect(path)
 
     fallback = FakeFallback()
-    speaker = FileSpeaker(make_files(tmp_path, "prepare", "cycle"), fallback, factory)
-    assert speaker.phases == {Phase.CLOSE}
+    speaker = FileSpeaker(make_files(tmp_path, "prepare", "finish"), fallback, factory)
+    assert speaker.phases == {Phase.FINISH}
     speaker.cue(Phase.PREPARE)
     assert fallback.cues == [Phase.PREPARE]
 
 
 def test_stop은_모든_재생을_멈추고_대체_음성도_멈춘다(tmp_path):
     fallback = FakeFallback()
-    speaker, effects = make_file_speaker(make_files(tmp_path, "cycle", "finish"), fallback)
-    speaker.cue(Phase.CLOSE)
-    speaker.cue(Phase.CLOSE)
+    speaker, effects = make_file_speaker(make_files(tmp_path, "prepare", "finish"), fallback)
+    speaker.cue(Phase.PREPARE)
+    speaker.cue(Phase.PREPARE)
     speaker.stop()
     assert all(e.stopped == 1 for pool in effects.values() for e in pool)
     assert fallback.stopped >= 1
 
 
 def test_대체_음성_없이도_동작한다(tmp_path):
-    speaker, effects = make_file_speaker(make_files(tmp_path, "cycle"), None)
-    speaker.cue(Phase.CLOSE)
-    speaker.cue(Phase.OPEN)
+    speaker, effects = make_file_speaker(make_files(tmp_path, "prepare"), None)
+    speaker.cue(Phase.PREPARE)
     speaker.cue(Phase.LOOK_AWAY)  # 파일도 대체도 없으면 조용히 넘어간다
     speaker.stop()
-    assert sum(e.played for e in effects["cycle"]) == 1
+    assert sum(e.played for e in effects["prepare"]) == 1
 
 
 def test_프로젝트_assets_폴더_위치가_맞다():

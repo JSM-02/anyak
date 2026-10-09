@@ -20,14 +20,14 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from eyeexercise.core.exercises import EXERCISE_BLINK, EXERCISE_DOT_FOLLOW  # noqa: E402
+from eyeexercise.core.exercises import EXERCISE_REST, EXERCISE_DOT_FOLLOW  # noqa: E402
 from eyeexercise.core.history import ACTIVITY_REST, EVENT_COMPLETED, EVENT_SKIPPED, EVENT_SNOOZED, HistoryEvent  # noqa: E402
 from eyeexercise.core.usage import UsageLog  # noqa: E402
 from eyeexercise.storage import json_store, paths  # noqa: E402
 
 REMINDER_MINUTES = 20  # 일하는 동안 알림이 오는 간격 (앱 기본값)
 SNOOZE_MINUTES = 5
-REST_SECONDS = 36  # 눈 휴식의 깜빡임 5회 (기본값)
+REST_SECONDS = 20  # 눈 휴식(먼 곳 바라보기 20초)
 EXERCISE_SECONDS = 60  # 눈 운동(점 따라가기)
 
 
@@ -72,7 +72,7 @@ def _events(day: date, sessions: list[tuple[int, int]], rng: random.Random, tz) 
         return base + timedelta(minutes=minute, seconds=rng.randint(0, 59))
 
     def rest(minute: float) -> None:
-        events.append(HistoryEvent(at(minute + 0.5), EVENT_COMPLETED, EXERCISE_BLINK, REST_SECONDS))
+        events.append(HistoryEvent(at(minute + 0.5), EVENT_COMPLETED, EXERCISE_REST, REST_SECONDS))
 
     for start, end in sessions:
         t = start + REMINDER_MINUTES + rng.uniform(-3, 6)  # 시작 후 한 주기가 지나면 첫 알림

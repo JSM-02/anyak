@@ -1,13 +1,12 @@
-"""운동 중 소리 안내. 눈을 감고 있어도 단계를 알 수 있게 한다.
+"""운동·휴식 소리 안내. 눈을 다른 곳에 두고 있어도 단계를 알 수 있게 한다.
 
 단계마다 다음 순서로 소리를 고른다. 모두 오프라인이며 네트워크를 쓰지 않는다.
 1. `assets/sounds/`의 녹음·효과음 파일이 있으면 그것을 재생한다.
 2. 없으면 한국어 음성(Windows 내장)으로 말한다.
 3. 한국어 음성도 없으면 단계별 알림음으로 대신한다.
 
-사이클 소리(`cycle.wav`)는 감기가 시작될 때 한 번 재생한다. 감기·유지·뜨기 전체가 그 파일 하나에
-이어서 들어 있고(뜨기 알림 종소리 포함), 파일 끝에는 다음 사이클과 겹치는 구간이 있다. 그래서
-다음 사이클이 시작돼도 앞 소리를 끊지 않고 겹쳐 재생해야 소리가 이어진다.
+소리는 짧아서 앞 소리가 끝나기 전에 다음 소리가 시작될 수 있다. 그래서 파일마다 재생기를 둘씩 두고 번갈아 써서
+앞 소리를 끊지 않고 겹쳐 재생한다.
 """
 
 import logging
@@ -26,20 +25,15 @@ SOUNDS_DIR = assets_dir() / "sounds"
 # 단계가 시작될 때 재생하는 파일 (assets/sounds/<이름>.wav)
 PHASE_FILES = {
     Phase.PREPARE: "prepare",
-    Phase.CLOSE: "cycle",
     Phase.FINISH: "finish",
     Phase.LOOK_AWAY: "look_away",
 }
-# 이 단계들의 소리는 다른 단계의 파일 안에 이미 들어 있다. (뜨기 종소리는 사이클 파일에 있다.)
-COVERED_BY = {Phase.HOLD: Phase.CLOSE, Phase.OPEN: Phase.CLOSE, Phase.REST: Phase.CLOSE}
 ALERT_FILE = "alert"  # 알림 팝업이 뜰 때 나는 소리 (assets/sounds/alert.wav)
 POOL_SIZE = 2  # 겹쳐 재생하려고 파일마다 재생기를 둘씩 두고 번갈아 쓴다
 
-# 음성이 없을 때 쓰는 알림음 높이(Hz). 감을 때는 낮게, 뜰 때는 높게 해서 구분한다.
+# 음성이 없을 때 쓰는 알림음 높이(Hz)
 BEEP_HZ = {
     Phase.PREPARE: 600,
-    Phase.CLOSE: 440,
-    Phase.OPEN: 880,
     Phase.FINISH: 660,
     Phase.LOOK_AWAY: 660,
 }
@@ -111,9 +105,6 @@ class FileSpeaker:
                 self._fallback.stop()  # 음성 합성이 남아 있으면 끊는다
             effect.play()  # 앞 소리는 끊지 않는다. 겹쳐서 이어진다.
             return
-        covering = COVERED_BY.get(phase)
-        if covering is not None and self._usable(covering):
-            return  # 이 단계의 소리는 이미 사이클 파일 안에 있다
         if self._fallback is not None:
             self._fallback.cue(phase)
 
@@ -123,9 +114,6 @@ class FileSpeaker:
                 effect.stop()
         if self._fallback is not None:
             self._fallback.stop()
-
-    def _usable(self, phase: Phase) -> bool:
-        return any(not _failed(e) for e in self._pools.get(phase, ()))
 
     def _pick(self, phase: Phase):
         """다음에 쓸 재생기를 번갈아 고른다. 재생 중이 아닌 것을 우선한다."""

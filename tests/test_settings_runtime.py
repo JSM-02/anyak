@@ -135,7 +135,7 @@ def test_미루기_시간을_바꾸면_팝업_버튼이_바뀐다(qapp, tmp_path
 
 def test_다음_운동은_바꾼_운동_시간과_속도로_시작한다(qapp, tmp_path, monkeypatch):
     tray_app, _ = make_app(qapp, tmp_path, monkeypatch)
-    tray_app.settings_manager.update({"exercises.blink.enabled": False, "exercises.dot_follow.duration_seconds": 90, "exercises.dot_follow.speed": "fast"})
+    tray_app.settings_manager.update({"exercises.dot_follow.duration_seconds": 90, "exercises.dot_follow.speed": "fast"})
     tray_app.controller.start_exercise()  # 알림 팝업 없이 지금 운동
     timeline = tray_app.exercise_window._timeline
     assert timeline.exercise == "dot_follow" and timeline.total_seconds == 90 and timeline.speed_hz == 0.3
@@ -144,7 +144,7 @@ def test_다음_운동은_바꾼_운동_시간과_속도로_시작한다(qapp, t
 
 def test_운동을_모두_끄면_운동이_시작되지_않고_타이머만_다시_센다(qapp, tmp_path, monkeypatch):
     tray_app, _ = make_app(qapp, tmp_path, monkeypatch)
-    tray_app.settings_manager.update({"exercises.blink.enabled": False, "exercises.dot_follow.enabled": False})
+    tray_app.settings_manager.update({"exercises.dot_follow.enabled": False})
     tray_app.controller.start_exercise()
     assert not tray_app.exercise_window.isVisible()
     assert tray_app.controller.state is State.RUNNING
