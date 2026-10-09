@@ -1,6 +1,6 @@
 """홈 화면에 쓰는 판단과 값 (GUI·파일 없음).
 
-오늘 하루를 한눈에 보여 주는 값(휴식 달성률, 스크린 타임, 눈 운동 진행)과, 타이머 진행 바·게이지 색 같은
+오늘 하루를 한눈에 보여 주는 값(휴식 달성률, 스크린 타임, 눈 운동 진행)과, 타이머 진행률·게이지 색 같은
 화면 규칙을 Qt 없이 계산해 테스트할 수 있게 한다.
 """
 
@@ -15,7 +15,6 @@ from eyeexercise.core.usage import UsageLog
 
 GAUGE_TARGET = 0.8  # 휴식 달성률 목표선
 GAUGE_MID = 0.5  # 이보다 낮으면 빨강
-PROGRESS_CELLS = 20  # 타이머 진행 바의 칸 수
 
 TONE_GOOD, TONE_MID, TONE_LOW, TONE_NONE = "good", "mid", "low", "none"
 
@@ -37,10 +36,6 @@ def timer_progress(remaining: float | None, target: float | None) -> float:
         return 0.0
     return min(1.0, max(0.0, 1.0 - remaining / target))
 
-
-def filled_cells(progress: float, cells: int = PROGRESS_CELLS) -> int:
-    """진행 바에서 채울 칸 수. 끝나기 직전까지는 마지막 칸을 비워 두고, 다 되면 모두 채운다."""
-    return min(cells, max(0, int(progress * cells)))
 
 
 @dataclass(frozen=True)

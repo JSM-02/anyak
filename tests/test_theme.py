@@ -57,6 +57,13 @@ def test_글자와_바탕의_대비가_두_테마_모두_충분하다():
         assert contrast(p.on_accent, p.accent) >= 3
 
 
+def test_홈_화면의_글자는_바탕과_물_위에서_모두_또렷하다():
+    for p in (theme.LIGHT, theme.DARK):
+        assert contrast(p.text, p.paper) >= 7  # 물 밖의 큰 글자
+        assert contrast(p.sand, p.hero) >= 6  # 물에 잠긴 글자
+        assert contrast(p.hero, p.paper) >= 2  # 물과 바탕이 서로 구분된다(글자가 아니라 면이라 기준이 낮고, 수면의 거품선이 경계를 더 또렷하게 한다)
+
+
 def test_다크_팔레트는_라이트보다_어둡다():
     assert luminance(theme.DARK.bg) < 80 < luminance(theme.LIGHT.bg)
     assert luminance(theme.DARK.text) > 180 > luminance(theme.LIGHT.text)

@@ -26,12 +26,12 @@ def test_창이_좁으면_본문은_창_너비에_맞춰_줄어든다(qapp):
     wrapper.close()
 
 
-def test_메인_창을_크게_키워도_모든_화면의_본문_너비가_그대로다(qapp):
+def test_메인_창을_크게_키워도_카드_화면의_본문_너비가_그대로다(qapp):  # 홈은 물이 창 전체를 채워서 따로 시험한다
     window = MainWindow(History())
     window.resize(2200, 1000)
     window.show()
     qapp.processEvents()
-    for index, page in enumerate((window.home_page, window.records_tab, window.vision_page, window.settings_page)):
+    for index, page in enumerate((window.records_tab, window.vision_page, window.settings_page), start=1):
         window.sidebar.set_current(index)
         qapp.processEvents()
         scroll_content = page.findChildren(QWidget, "pageColumn")[0]

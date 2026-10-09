@@ -57,6 +57,7 @@ class Palette:
     sidebar_text: str
     sidebar_pill: str
     ink: str  # 모래색·밝은 초록처럼 채운 바탕 위에 쓰는 글자색. 라이트·다크 모두 같은 짙은 초록이다
+    paper: str  # 홈 화면 바탕. 물(hero)과 글자가 가장 또렷하게 보이도록 초록 기운이 거의 없는 흰색(다크는 앱 바탕)
 
 
 LIGHT = Palette(
@@ -96,6 +97,7 @@ LIGHT = Palette(
     sidebar_text="#9FC8A6",
     sidebar_pill="#12544F",
     ink="#092328",
+    paper="#F8F8F5",
 )
 
 DARK = Palette(
@@ -135,6 +137,7 @@ DARK = Palette(
     sidebar_text="#9fc8a6",
     sidebar_pill="#15423c",
     ink="#092328",
+    paper="#0c1a1d",
 )
 
 # 글자 크기(px). 화면마다 제각각이던 값을 이 여덟 가지로 맞춘다.

@@ -5,8 +5,6 @@ from eyeexercise.core.history import HistoryEvent
 from eyeexercise.core.home import (
     GAUGE_MID,
     GAUGE_TARGET,
-    PROGRESS_CELLS,
-    filled_cells,
     gauge_tone,
     home_summary,
     timer_progress,
@@ -46,7 +44,7 @@ def test_달성률이_없으면_색_단계도_없다():
     assert gauge_tone(None) == "none"
 
 
-# ---- 타이머 진행 바 ----
+# ---- 타이머 진행률 ----
 
 
 def test_진행률은_지난_비율이다():
@@ -65,16 +63,6 @@ def test_진행률은_0에서_1_사이로_보정한다():
     assert timer_progress(-5, 100) == 1.0
     assert timer_progress(500, 100) == 0.0
 
-
-def test_채울_칸_수는_20칸_안에서_올림_없이_센다():
-    assert filled_cells(0.0) == 0
-    assert filled_cells(0.049) == 0
-    assert filled_cells(0.05) == 1
-    assert filled_cells(0.5) == 10
-    assert filled_cells(0.999) == PROGRESS_CELLS - 1  # 끝나기 직전까지 마지막 칸은 비워 둔다
-    assert filled_cells(1.0) == PROGRESS_CELLS
-    assert filled_cells(2.0) == PROGRESS_CELLS
-    assert filled_cells(-1.0) == 0
 
 
 # ---- 홈 타이머 문구 ----
