@@ -1,4 +1,4 @@
-# 쉬엄 (코드 이름: EyeExercise)
+# (안)약 (코드 이름: EyeExercise)
 
 PC를 사용하는 동안 일정 간격으로 눈 운동을 알려주는 Windows 트레이 상주 앱.
 
@@ -45,8 +45,8 @@ PC를 사용하는 동안 일정 간격으로 눈 운동을 알려주는 Windows
   - `.venv\Scripts\python -m pip install -e .`
 - 실행: `.venv\Scripts\python -m eyeexercise`
 - 테스트: `.venv\Scripts\python -m pytest`
-- exe 빌드: `.venv\Scripts\python -m PyInstaller eyeexercise.spec --noconfirm` (결과: `dist\Swieom\`, 폴더형)
-- 배포용 zip: `.venv\Scripts\python tools\package_release.py` (결과: `dist\Swieom-<버전>-win64.zip`)
+- exe 빌드: `.venv\Scripts\python -m PyInstaller eyeexercise.spec --noconfirm` (결과: `dist\Anyak\`, 폴더형)
+- 배포용 zip: `.venv\Scripts\python tools\package_release.py` (결과: `dist\Anyak-<버전>-win64.zip`)
 
 ## 작업 방식
 - 기능 단위로 작게 나눠 진행한다. 한 번에 여러 기능을 크게 구현하지 않는다.

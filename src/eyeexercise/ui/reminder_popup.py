@@ -89,7 +89,7 @@ class ReminderPopup(QWidget):
         self._count_text = str(LOOK_AWAY_SECONDS)
         self._count_progress = 0.0  # 0(시작) ~ 1(끝). 물이 빠진 정도다
 
-        title = QLabel("눈 쉬는 시간이에요")
+        title = QLabel("눈이 쉴 시간이에요")
         title.setObjectName("title")
         body = QLabel("잠깐 화면에서 눈을 떼고\n눈을 쉬게 해 볼까요?")
         body.setObjectName("message")

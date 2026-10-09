@@ -62,7 +62,7 @@ class TrayIcon(QObject):
 
     def _status_text(self, state: State) -> str:
         if state is State.DUE:
-            return "눈 쉬는 시간이에요"
+            return "눈이 쉴 시간이에요"
         if state is State.EXERCISING:
             return "눈 운동 중" if self._controller.activity == "exercise" else "눈 쉬는 중"
         remaining = self._controller.remaining_seconds

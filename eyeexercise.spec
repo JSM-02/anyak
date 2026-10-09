@@ -44,7 +44,7 @@ exe = EXE(
     a.scripts,
     [],
     exclude_binaries=True,
-    name="Swieom",
+    name="Anyak",
     icon="assets/icons/app.ico",
     console=False,
     upx=False,
@@ -57,5 +57,5 @@ coll = COLLECT(
     a.datas,
     strip=False,
     upx=False,
-    name="Swieom",
+    name="Anyak",
 )

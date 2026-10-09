@@ -8,7 +8,7 @@ from eyeexercise.platform.win_startup import WinAutoStart, startup_command
 
 pytestmark = pytest.mark.skipif(sys.platform != "win32", reason="Windows 전용")
 
-EXE = r"C:\Program Files\쉬엄 테스트\Swieom.exe"
+EXE = r"C:\Program Files\안약 테스트\Anyak.exe"
 
 
 @pytest.fixture

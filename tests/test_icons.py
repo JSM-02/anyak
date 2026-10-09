@@ -19,27 +19,38 @@ def parse_ico(data: bytes):
 
 
 @pytest.mark.parametrize("size", ICON_SIZES)
-def test_아이콘은_크기마다_초록_바탕에_감은_눈과_새싹이_그려진다(size):
+def test_아이콘은_크기마다_초록_바탕에_괄호와_물방울이_그려진다(size):
     image = render_icon(size)
     assert (image.width(), image.height()) == (size, size)
     assert image.pixelColor(0, 0).alpha() == 0  # 모서리는 투명(둥근 사각형)
-    top = image.pixelColor(size // 2, max(1, size // 10))  # 위쪽 바탕
-    assert top.green() > top.red() + 40 and top.green() > top.blue() + 30  # 초록 계열
-    # 감은 눈의 곡선은 가운데 아래쪽(격자 43.5)에서 가장 아래로 처지고 흰색이다
-    arc = image.pixelColor(size // 2, round(size * 43.5 / 64))
-    assert min(arc.red(), arc.green(), arc.blue()) > 200
-    # 새싹의 큰 잎은 오른쪽 위에 모래색으로 있다 (눈 곡선보다 위, 바탕보다 밝다)
-    cx, cy = round(size * 46 / 64), round(size * 17.5 / 64)
-    spot = [image.pixelColor(x, y) for x in range(cx - 1, cx + 2) for y in range(cy - 1, cy + 2)]  # 작은 크기에서는 안티앨리어싱으로 번지므로 주변에서 가장 밝은 곳을 본다
-    leaf = max(spot, key=lambda c: c.red() + c.green())
-    assert leaf.red() > 200 and leaf.green() > 190 and leaf.red() > leaf.blue() + 15
+    top = image.pixelColor(size // 2, max(2, size // 8))  # 위쪽 바탕은 깊은 초록 한 색이다
+    assert top.name() == "#12544f"
+    mark = QColor("#F2E3B3")
+
+    def is_mark(c):
+        return abs(c.red() - mark.red()) < 40 and abs(c.green() - mark.green()) < 40 and abs(c.blue() - mark.blue()) < 60
+
+    # 물방울은 가운데 아래쪽에 모래색으로 있다
+    assert is_mark(image.pixelColor(size // 2, round(size * 0.58)))
+    # 괄호는 왼쪽과 오른쪽 가장자리 안쪽에 모래색 획으로 있다 (가운데 높이)
+    row = round(size * 0.5)
+    left = [image.pixelColor(x, row) for x in range(round(size * 0.12), round(size * 0.30))]
+    right = [image.pixelColor(x, row) for x in range(round(size * 0.70), round(size * 0.88))]
+    # 작은 크기에서는 얇은 획이 번지므로 바탕(빨강 18)보다 확실히 밝은 곳이 있는지만 본다
+    assert any(c.red() > 110 for c in left) and any(c.red() > 110 for c in right)
 
 
-def test_눈_위쪽_가운데는_바탕이고_눈동자가_없다():
-    """감은 눈이라 가운데에 눈동자(어두운 점)가 없다. 눈 곡선 위의 가운데는 초록 바탕 그대로다."""
+def test_아이콘은_그라데이션_없이_납작한_한_색_바탕이다():
     image = render_icon(128)
-    center = image.pixelColor(64, 50)
-    assert center.green() > center.red() and center.red() < 120
+    colors = {image.pixelColor(64, y).name() for y in (10, 14, 20, 100, 112, 118)}
+    assert colors == {"#12544f"}  # 위·아래 어디서나 같은 색
+
+
+def test_아이콘에는_눈이나_새싹_같은_옛_그림이_없다():
+    """이름이 (안)약으로 바뀌며 감은 눈과 새싹은 빠졌다. 가운데 위쪽(옛 새싹·눈 자리)은 바탕색 그대로다."""
+    image = render_icon(128)
+    assert image.pixelColor(100, 20).name() == "#12544f"  # 옛 새싹(오른쪽 위)
+    assert image.pixelColor(64, 100).name() == "#12544f"  # 옛 속눈썹 쪽
 
 
 def test_아이콘에_여러_크기가_담겨_배율에서도_또렷하다(qapp):

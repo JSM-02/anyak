@@ -26,6 +26,7 @@ from eyeexercise.ui.controller import Controller
 from eyeexercise.ui.home_page import HomePage
 from eyeexercise.ui.records_tab import RecordsTab
 from eyeexercise.ui.settings_page import SettingsPage
+from eyeexercise.ui.help_popup import HelpPopup
 from eyeexercise.ui.slide_stack import SlideStack
 from eyeexercise.ui.topbar import TopBar
 from eyeexercise.ui.vision_page import VisionPage
@@ -91,6 +92,8 @@ class MainWindow(QMainWindow):
         self.topbar.current_changed.connect(self._stack.setCurrentIndex)
         self.topbar.current_changed.connect(self._update_pill)
         self._update_pill(0)
+        self.help_popup = HelpPopup(self)
+        self.topbar.help_requested.connect(lambda: self.help_popup.show_below(self.topbar.help_button))
         self._controller: Controller | None = None
 
         central = QWidget()

@@ -1,4 +1,4 @@
-"""빌드한 폴더(dist/Swieom)를 배포용 zip으로 묶는다.
+"""빌드한 폴더(dist/Anyak)를 배포용 zip으로 묶는다.
 
 사용법 (먼저 exe를 빌드한다):
     .venv\\Scripts\\python -m PyInstaller eyeexercise.spec --noconfirm
@@ -23,15 +23,15 @@ TOP_DIRS = ["LICENSES", "docs/images"]  # README의 스크린샷이 압축을 �
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--dist", type=Path, default=ROOT / "dist" / "Swieom", help="빌드 결과 폴더")
-    parser.add_argument("--out", type=Path, default=None, help="만들 zip 경로 (기본: dist/Swieom-<버전>-win64.zip)")
+    parser.add_argument("--dist", type=Path, default=ROOT / "dist" / "Anyak", help="빌드 결과 폴더")
+    parser.add_argument("--out", type=Path, default=None, help="만들 zip 경로 (기본: dist/Anyak-<버전>-win64.zip)")
     args = parser.parse_args()
 
-    if not (args.dist / "Swieom.exe").is_file():
-        print(f"빌드 결과가 없습니다: {args.dist / 'Swieom.exe'}  (먼저 PyInstaller로 빌드하세요)", file=sys.stderr)
+    if not (args.dist / "Anyak.exe").is_file():
+        print(f"빌드 결과가 없습니다: {args.dist / 'Anyak.exe'}  (먼저 PyInstaller로 빌드하세요)", file=sys.stderr)
         return 1
-    out = args.out or ROOT / "dist" / f"Swieom-{__version__}-win64.zip"
-    folder = f"Swieom-{__version__}"
+    out = args.out or ROOT / "dist" / f"Anyak-{__version__}-win64.zip"
+    folder = f"Anyak-{__version__}"
 
     with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as z:
         for path in sorted(args.dist.rglob("*")):

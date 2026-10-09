@@ -41,7 +41,7 @@ APPEARANCE_LABELS = {"system": "시스템 설정", "light": "라이트", "dark":
 SPEED_LABELS = {"slow": "느리게", "normal": "보통", "fast": "빠르게"}
 SAVE_FAILED_MESSAGE = "설정을 파일에 저장하지 못했어요. 이번 실행에서만 적용돼요."
 AUTOSTART_FAILED_MESSAGE = "자동 실행 설정을 바꾸지 못했어요. 이 계정에서 레지스트리에 쓸 수 없는 상태일 수 있어요."
-AUTOSTART_UNAVAILABLE_HINT = "설치한 쉬엄(exe)으로 실행할 때만 쓸 수 있어요."
+AUTOSTART_UNAVAILABLE_HINT = "설치한 (안)약(exe)으로 실행할 때만 쓸 수 있어요."
 EXERCISE_OFF_MESSAGE = "점 따라가기를 끄면 눈 운동을 권하지 않아요."
 CUSTOM_LENGTH_MESSAGE = "고급 설정에서 운동마다 따로 정한 길이를 쓰고 있어요."
 RESET_TEXT = "설정 초기화"
@@ -313,7 +313,7 @@ class SettingsPage(QWidget):
         switch.toggled.connect(self._on_autostart_toggled)
         self._autostart_switch = switch
         available = self._autostart is not None and self._autostart.is_available()
-        hint = "켜면 PC를 켤 때 쉬엄이 자동으로 시작돼요. 지우기 전에는 꺼 주세요." if available else AUTOSTART_UNAVAILABLE_HINT
+        hint = "켜면 PC를 켤 때 (안)약이 자동으로 시작돼요. 지우기 전에는 꺼 주세요." if available else AUTOSTART_UNAVAILABLE_HINT
         switch.setEnabled(available)
         return self._row(title, hint, switch)
 

@@ -1,4 +1,4 @@
-"""위쪽 메뉴 줄: 왼쪽에 '쉬엄' 글자, 오른쪽에 메뉴(선택한 메뉴는 아래 밑줄), 그 옆에 눈 휴식 남은 시간(점 + 글자).
+"""위쪽 메뉴 줄: 왼쪽에 앱 이름 글자, 오른쪽에 메뉴(선택한 메뉴는 아래 밑줄)와 사용 안내 "?", 메뉴 왼쪽에 눈 휴식 남은 시간(점 + 글자).
 
 시안 E의 모양대로 상자 없이 굵은 글씨만 쓴다. 홈은 큰 타이머가 이미 있어서 남은 시간 표시를 숨긴다(`set_pill_visible`).
 모두 직접 그려서 Windows 기본 모양에 의존하지 않고 테마(라이트·다크)가 바뀌면 같이 바뀐다.
@@ -76,6 +76,43 @@ class NavButton(QAbstractButton):
         painter.end()
 
 
+class HelpButton(QAbstractButton):
+    """사용 안내를 여는 동그란 "?" 버튼. 테두리만 있는 원이라 메뉴 글자와 같은 결로 보인다."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.setAccessibleName("사용 안내")
+        self.setToolTip("사용 안내")
+        self.setFixedSize(36, 36)
+
+    def enterEvent(self, event) -> None:
+        self.update()
+        super().enterEvent(event)
+
+    def leaveEvent(self, event) -> None:
+        self.update()
+        super().leaveEvent(event)
+
+    def paintEvent(self, _event) -> None:
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        rect = QRectF(self.rect()).adjusted(2, 2, -2, -2)
+        hovered = self.underMouse() or self.isDown()
+        color = theme.color("text") if hovered else theme.color("text_secondary")
+        if hovered:
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.setBrush(theme.color("chip"))
+            painter.drawEllipse(rect)
+        painter.setBrush(Qt.BrushStyle.NoBrush)
+        painter.setPen(QPen(color, 2))
+        painter.drawEllipse(rect)
+        painter.setFont(_bold(16))
+        painter.setPen(color)
+        painter.drawText(QRectF(self.rect()), Qt.AlignmentFlag.AlignCenter, "?")
+        painter.end()
+
+
 class TimerPill(QWidget):
     """눈 휴식 남은 시간: ● 12:34 뒤 휴식. 상자 없이 점과 굵은 글자만 쓰고, 점 색으로 상태(보통·알림·정지·하는 중)를 알린다."""
 
@@ -120,6 +157,7 @@ class TimerPill(QWidget):
 
 class TopBar(QWidget):
     current_changed = Signal(int)
+    help_requested = Signal()  # "?"를 눌렀다
 
     def __init__(self, labels: Sequence[str], parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -147,6 +185,10 @@ class TopBar(QWidget):
             self._group.addButton(button)
             self._buttons.append(button)
             layout.addWidget(button)
+        layout.addSpacing(10)
+        self.help_button = HelpButton()
+        self.help_button.clicked.connect(self.help_requested)
+        layout.addWidget(self.help_button)
         self._buttons[0].setChecked(True)
         self._current = 0
         theme.on_changed(self._on_theme_changed)
@@ -156,6 +198,7 @@ class TopBar(QWidget):
         for button in self._buttons:
             button.update()
         self.timer_pill.update()
+        self.help_button.update()
 
     def count(self) -> int:
         return len(self._buttons)

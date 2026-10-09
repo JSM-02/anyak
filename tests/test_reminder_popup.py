@@ -82,7 +82,7 @@ def contrast_ok() -> bool:
 def test_단추_이름은_그대로다(qapp):
     p = popup()
     assert [b.text() for b in p.findChildren(QPushButton)][:3] == ["시작", "5분 미루기", "건너뛰기"]
-    assert any(label.text() == "눈 쉬는 시간이에요" for label in p.findChildren(QLabel))
+    assert any(label.text() == "눈이 쉴 시간이에요" for label in p.findChildren(QLabel))
 
 
 # ---- 움직임 ----

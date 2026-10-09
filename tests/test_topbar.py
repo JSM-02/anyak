@@ -56,7 +56,7 @@ def test_로고_그림_없이_이름_글자만_있다(qapp):
 
     side = make_topbar()
     labels = side.findChildren(QLabel)
-    assert [label.text() for label in labels] == ["쉬엄"] and all(label.pixmap().isNull() for label in labels)
+    assert [label.text() for label in labels] == ["(안)약"] and all(label.pixmap().isNull() for label in labels)
 
 
 def test_타이머_알약은_홈에서만_숨는다(qapp):

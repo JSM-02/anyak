@@ -237,7 +237,7 @@ def test_트레이_안내_문구는_휴식_기준이다(qapp, tmp_path, monkeypa
     tray_app, _ = make_app(qapp, tmp_path, monkeypatch)
     tray = tray_app.tray
     assert "다음 휴식까지" in tray._status_text(State.RUNNING)
-    assert tray._status_text(State.DUE) == "눈 쉬는 시간이에요"
+    assert tray._status_text(State.DUE) == "눈이 쉴 시간이에요"
     tray_app.controller.start_rest()
     assert tray._status_text(State.EXERCISING) == "눈 쉬는 중"
     tray_app.popup.hide()  # 팝업 안의 20초를 멈춘다(휴식은 팝업 안에서 한다)

@@ -6,8 +6,8 @@ from eyeexercise.ui.main_window import MainWindow
 from eyeexercise.storage import paths
 
 
-def test_앱_이름은_쉬엄이다():
-    assert eyeexercise.APP_NAME == "쉬엄"
+def test_앱_이름은_안약이다():
+    assert eyeexercise.APP_NAME == "(안)약"
 
 
 def test_창_제목과_사이드바_이름이_앱_이름을_쓴다(qapp):
@@ -39,7 +39,7 @@ def test_버전_출력에_앱_이름이_나온다(capsys, monkeypatch):
 
     monkeypatch.setattr(sys, "argv", ["eyeexercise", "--version"])
     assert main() == 0
-    assert capsys.readouterr().out.startswith("쉬엄 ")
+    assert capsys.readouterr().out.startswith("(안)약 ")
 
 
 # ---- 데이터 폴더 이름이 바뀌어도 기록이 남는다 ----
