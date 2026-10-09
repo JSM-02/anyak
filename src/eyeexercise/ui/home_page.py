@@ -25,21 +25,18 @@ from eyeexercise.core.tide import (
     WAVE_MID,
     EyeRow,
     WaveStyle,
-    back_offset,
     display_level,
     eye_row,
-    wave_margin,
-    wave_offset,
     water_level,
 )
 from eyeexercise.core.usage import UsageLog
 from eyeexercise.platform.win_motion import animations_enabled
 from eyeexercise.ui import theme
+from eyeexercise.ui.water import water_paths
 
 LIVE_REFRESH_MS = 30_000  # 보는 동안 스크린 타임·달성률이 따라가도록 새로 그리는 간격
 FRAME_MS = 33  # 물결을 다시 그리는 간격(초당 약 30번)
 LEVEL_EASE = 0.12  # 수위가 목표로 다가가는 정도(프레임마다). 상태가 바뀌어도 물이 갑자기 뛰지 않는다
-WAVE_STEP = 12  # 수면 곡선을 이 간격(px)마다 계산한다
 
 MARGIN_X = 36
 MARGIN_TOP = 28
@@ -315,23 +312,8 @@ class HomePage(QWidget):
     # ---- 수면 ----
 
     def water_paths(self) -> tuple[QPainterPath, QPainterPath, QPainterPath]:
-        """(앞쪽 물, 뒤쪽 옅은 물결, 앞쪽 수면의 선). 수위 0%와 100%에서도 빈틈이 없도록 위아래로 여백을 둔다."""
-        w, h = float(self.width()), float(self.height())
-        margin = wave_margin(self._wave)
-        base = -margin + (h + 2 * margin) * (1 - display_level(self._level))
-        t = self._wave_t
-        xs = [min(float(x), w) for x in range(0, int(w) + WAVE_STEP, WAVE_STEP)]
-        line = QPainterPath(QPointF(xs[0], base + wave_offset(xs[0], t, w, self._wave)))
-        back = QPainterPath(QPointF(xs[0], base + back_offset(xs[0], t, w, self._wave)))
-        for x in xs[1:]:
-            line.lineTo(x, base + wave_offset(x, t, w, self._wave))
-            back.lineTo(x, base + back_offset(x, t, w, self._wave))
-        front = QPainterPath(line)
-        for path in (front, back):
-            path.lineTo(w, h + margin)
-            path.lineTo(0, h + margin)
-            path.closeSubpath()
-        return front, back, line
+        """(앞쪽 물, 뒤쪽 옅은 물결, 앞쪽 수면의 선). 수위가 0%여도 바닥에 얇게 깔린다."""
+        return water_paths(self.width(), self.height(), display_level(self._level), self._wave_t, self._wave)
 
     # ---- 그리기 ----
 
@@ -383,6 +365,19 @@ class HomePage(QWidget):
             eyes_top,
         )
 
+    def _clock_fit(self, g: _Geometry) -> tuple[float, float]:
+        """(큰 글자의 크기, 기준선 위치). 숫자는 기준선에 놓이고, '지금'처럼 숫자보다 키가 큰 글자는 숫자 영역 안에 들어오게 줄여서
+        위아래의 작은 글자와 겹치지 않게 한다. 글자 모양의 가운데가 숫자 영역의 가운데에 오도록 놓는다."""
+        px = g.clock_px * (0.4 if self._clock == "–" else 1.0)
+        weight = self._weight() if self._clock != "–" else QFont.Weight.Bold
+        tight = QFontMetricsF(self._font(px, weight)).tightBoundingRect(self._clock)
+        if tight.height() <= 0:  # 글꼴 정보를 얻지 못하면 숫자처럼 기준선에 놓는다
+            return px, g.clock.bottom()
+        if tight.height() > g.clock.height() > 0:
+            px *= g.clock.height() / tight.height()
+            tight = QFontMetricsF(self._font(px, weight)).tightBoundingRect(self._clock)
+        return px, g.clock.center().y() - (tight.top() + tight.bottom()) / 2
+
     def _paint_content(self, painter: QPainter, color: QColor) -> None:
         """글자와 아이콘을 color로 그린다. 물 밖(짙은색)과 물 안(모래색)에서 한 번씩 부른다."""
         g = self._geometry()
@@ -392,12 +387,11 @@ class HomePage(QWidget):
         painter.setPen(color)
         painter.setFont(self._font(self._fs("fs_heading"), QFont.Weight.ExtraBold))
         painter.drawText(g.kicker, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, self._kicker)
+        px, baseline = self._clock_fit(g)
         if self._clock == "–":  # 시간을 세지 않는 동안의 자리 표시. 굵은 큰 글자로 그리면 막대처럼 보여서 작고 옅게 그린다
             painter.setPen(faded)
-            painter.setFont(self._font(g.clock_px * 0.4, QFont.Weight.Bold))
-        else:
-            painter.setFont(self._font(g.clock_px, self._weight()))
-        painter.drawText(QPointF(g.clock.left(), g.clock.bottom()), self._clock)  # 기준선에 맞춰 그린다
+        painter.setFont(self._font(px, self._weight() if self._clock != "–" else QFont.Weight.Bold))
+        painter.drawText(QPointF(g.clock.left(), baseline), self._clock)
         painter.setPen(faded)
         painter.setFont(self._font(self._fs("fs_small"), QFont.Weight.Bold))
         painter.drawText(g.sub, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, self._sub)

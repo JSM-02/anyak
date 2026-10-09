@@ -77,7 +77,7 @@ def test_테마를_바꾸면_이미_만든_화면의_스타일시트가_바뀐�
     theme.set_dark(True)
     after = [w.styleSheet() for w in (window.vision_page, window.settings_page, window.records_tab, popup, exercise)]
     assert all(b != a for b, a in zip(before, after, strict=True))
-    assert theme.DARK.hero in popup.styleSheet()
+    assert theme.DARK.sand in popup.styleSheet()  # 팝업의 글자·버튼은 물 속의 모래색
     theme.set_dark(False)
     assert popup.styleSheet() == before[3]
 

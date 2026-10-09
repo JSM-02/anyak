@@ -403,6 +403,57 @@ def test_큰_창에서도_물은_창_전체를_채운다(qapp):
     assert pixel(home, 5, 450).name() == theme.color("hero").name() and pixel(home, 2195, 450).name() == theme.color("hero").name()
 
 
+class _FakeMetrics:
+    """글꼴 정보가 없는 시험 환경에서 글자 모양의 높이를 흉내 낸다. 숫자는 기준선 위로 0.72em, 한글은 기준선 위 0.8em·아래 0.2em."""
+
+    def __init__(self, font):
+        self.px = font.pixelSize()
+
+    def horizontalAdvance(self, text):
+        return 0.6 * self.px * max(1, len(text))
+
+    def height(self):
+        return 1.3 * self.px
+
+    def tightBoundingRect(self, text):
+        from PySide6.QtCore import QRectF
+
+        if text.replace(":", "").isdigit():
+            return QRectF(0, -0.72 * self.px, 1, 0.72 * self.px)
+        if text == "–":
+            return QRectF(0, -0.3 * self.px, 1, 0.1 * self.px)
+        return QRectF(0, -0.8 * self.px, 1, 1.0 * self.px)
+
+
+def test_숫자가_아닌_큰_글자도_위아래_글자와_겹치지_않는다(qapp, monkeypatch):
+    import eyeexercise.ui.home_page as module
+
+    monkeypatch.setattr(module, "QFontMetricsF", _FakeMetrics)
+    home = sized(page())
+    for state, remaining, activity in ((State.RUNNING, 754, None), (State.DUE, None, None), (State.EXERCISING, None, "rest")):
+        home.set_timer(state, remaining, 1200, activity)
+        g = home._geometry()
+        px, baseline = home._clock_fit(g)
+        tight = _FakeMetrics(home._font(px, home._weight())).tightBoundingRect(home.clock_text)
+        top, bottom = baseline + tight.top(), baseline + tight.bottom()
+        # 글자 모양 전체가 위 글자(kicker)의 아래와 아래 글자(sub)의 위 사이에 있다
+        assert top >= g.kicker.bottom() - 1 and bottom <= g.sub.top() + 1, state
+    home.set_timer(State.RUNNING, 754, 1200, None)
+    px, baseline = home._clock_fit(home._geometry())
+    assert abs(baseline - home._geometry().clock.bottom()) < 1  # 숫자는 기준선에 놓인다
+
+
+def test_지금은_숫자보다_작게_그린다(qapp, monkeypatch):
+    import eyeexercise.ui.home_page as module
+
+    monkeypatch.setattr(module, "QFontMetricsF", _FakeMetrics)
+    home = sized(page())
+    home.set_timer(State.RUNNING, 754, 1200, None)
+    digits_px = home._clock_fit(home._geometry())[0]
+    home.set_timer(State.DUE, None, 1200, None)
+    assert home._clock_fit(home._geometry())[0] < digits_px
+
+
 def test_모든_상태에서_화면이_그려진다(qapp):
     home = sized(page())
     for state, remaining in ((State.RUNNING, 700), (State.SNOOZED, 120), (State.PAUSED, 300), (State.DUE, None), (State.EXERCISING, None)):

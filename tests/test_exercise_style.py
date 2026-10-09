@@ -70,11 +70,11 @@ def test_점_화면은_연한_영역에_초록_점이다(qapp):
     assert pixel(canvas, int(pos.x()) + 7, int(pos.y())).name() == theme.color("accent").name()  # 점의 가장자리 (가운데 점은 밝은 색)
 
 
-# ---- 알림 팝업: 짙은 초록 색 블록 ----
+# ---- 알림 팝업: 짙은 초록 물 ----
 
 
-def test_알림_팝업은_짙은_초록_바탕이고_시작_버튼이_모래색이다(qapp):
-    popup = ReminderPopup(5)
+def test_알림_팝업은_짙은_초록_물이고_시작_버튼이_모래색이다(qapp):
+    popup = ReminderPopup(5, animations=lambda: False)
     popup.show()
     qapp.processEvents()
     assert pixel(popup, 6, popup.height() // 2).name() == theme.color("hero").name()
