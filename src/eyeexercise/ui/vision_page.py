@@ -336,6 +336,7 @@ class VisionPage(QWidget):
         if record.memo:
             memo = QLabel(record.memo)
             memo.setObjectName("memo")
+            memo.setTextFormat(Qt.TextFormat.PlainText)  # 메모의 <태그>를 서식·이미지로 해석하지 않는다
             memo.setWordWrap(True)
             info.addWidget(memo)
 

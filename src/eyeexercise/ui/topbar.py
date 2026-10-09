@@ -7,7 +7,7 @@
 from collections.abc import Sequence
 
 from PySide6.QtCore import QRectF, QSize, Qt, Signal
-from PySide6.QtGui import QColor, QFont, QFontMetrics, QPainter, QPen
+from PySide6.QtGui import QFont, QFontMetrics, QPainter, QPen
 from PySide6.QtWidgets import QAbstractButton, QButtonGroup, QHBoxLayout, QLabel, QWidget
 
 from eyeexercise import APP_NAME

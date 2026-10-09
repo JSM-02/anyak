@@ -194,3 +194,16 @@ def test_만들고_갱신하는_동안_독립된_작은_창이_뜨지_않는다(
     finally:
         qapp.removeEventFilter(spy)
     assert shown == []
+
+
+def test_메모는_서식_없는_글자로만_보인다(qapp):
+    """메모에 `<b>`·`<img>` 같은 태그가 들어 있어도 서식으로 해석하지 않고 적힌 그대로 보여 준다."""
+    from PySide6.QtCore import Qt
+
+    page, _ = make_page()
+    fill(page, memo='<b>굵게</b><img src="file:///C:/x.png">')
+    page.save_button.click()
+    memos = [label for label in page.findChildren(QLabel) if label.objectName() == "memo"]
+    assert len(memos) == 1
+    assert memos[0].textFormat() == Qt.TextFormat.PlainText
+    assert memos[0].text() == '<b>굵게</b><img src="file:///C:/x.png">'
