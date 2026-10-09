@@ -4,10 +4,10 @@
 
 - **눈 휴식**(`rest_timeline`): 20분마다. 깜빡임(`blink_timeline`)이 끝나면 곧바로 먼 곳 바라보기(20초 카운트다운)가
   이어진다. 깜빡임을 끄면 먼 곳 바라보기만 한다(`LookAwayTimeline`).
-- **눈 운동**(`exercise_timeline`): 하루 1~2회. 점 따라가기(`dot_follow_timeline`) 뒤에도 먼 곳 바라보기가 이어진다.
+- **눈 운동**(`exercise_timeline`): 하루 1~2회. 점 따라가기(`dot_follow_timeline`)만 한다. 끝나면 바로 닫히고 먼 곳 바라보기는 이어지지 않는다.
 
-타임라인은 모두 본 활동(준비 → 본 활동 → 마무리, 총 `total_seconds`) 뒤에 먼 곳 바라보기가 오고,
-그것까지 끝나면 `done`이 된다.
+깜빡임 휴식의 타임라인은 본 활동(준비 → 본 활동 → 마무리, 총 `total_seconds`) 뒤에 먼 곳 바라보기가 오고 그것까지 끝나면 `done`이 된다.
+점 따라가기는 마무리가 끝나는 `total_seconds`에서 곧바로 `finished`와 `done`이 된다.
 """
 
 import math
@@ -23,7 +23,7 @@ EXERCISE_DOT_FOLLOW = "dot_follow"
 
 PREPARE_SECONDS = 3
 FINISH_SECONDS = 3
-LOOK_AWAY_SECONDS = 20  # 운동 뒤에 먼 곳을 바라보는 시간 (20-20-20 규칙)
+LOOK_AWAY_SECONDS = 20  # 휴식에서 먼 곳을 바라보는 시간 (20-20-20 규칙)
 
 # 깜빡임 운동 구성(초). 준비 → (감기 → 유지 → 뜨기 → 쉬기) 반복 → 마무리
 # 심호흡처럼 천천히: 눈을 천천히 감고(2초) 잠시 머문 뒤(1초) 천천히 뜨고(2초) 숨을 돌린다(1초).
@@ -81,6 +81,7 @@ class ExerciseStep:
     countdown: int | None = None  # 먼 곳 바라보기의 남은 초 (20→1). 그 외에는 None
     done: bool = False  # 먼 곳 바라보기까지 모두 끝났다 (창을 닫을 시점)
     dot: tuple[float, float] | None = None  # 점 따라가기: 점의 위치 (0~1 정규화 좌표). 그 외에는 None
+    pattern: int | None = None  # 점 따라가기: 지금 따라가는 경로의 번호(DOT_PATTERNS의 순서). 점을 따라가는 중이 아니면 None
 
 
 def _look_away_step(t: float, eye_openness: float | None) -> ExerciseStep:
@@ -239,8 +240,8 @@ class DotFollowTimeline:
         total = float(self.total_seconds)
         elapsed = max(0.0, elapsed)
         progress = min(1.0, elapsed / total)
-        if elapsed >= total:
-            return _look_away_step(elapsed - total, None)
+        if elapsed >= total:  # 점 따라가기 뒤에는 먼 곳 바라보기를 하지 않는다. 마무리가 끝나면 바로 끝난다
+            return ExerciseStep(Phase.FINISH, MESSAGES[Phase.FINISH], None, 1.0, True, done=True, dot=DOT_CENTER)
         if elapsed < PREPARE_SECONDS:
             return ExerciseStep(Phase.PREPARE, DOT_PREPARE_MESSAGE, None, progress, False, dot=DOT_CENTER)
         if elapsed >= self._body_end:
@@ -256,7 +257,9 @@ class DotFollowTimeline:
         # 패턴이 바뀐 직후에는 앞 패턴이 끝난 자리에서 새 경로로 부드럽게 갈아탄다 (순간이동 없음)
         start = DOT_CENTER if index == 0 else self._segment_end(index - 1)
         dot = _lerp(start, self._raw(index, t), _smoothstep(t / DOT_TRANSITION_SECONDS))
-        return ExerciseStep(Phase.TRACK, self.pattern_at(index).message, None, progress, False, dot=dot)
+        return ExerciseStep(
+            Phase.TRACK, self.pattern_at(index).message, None, progress, False, dot=dot, pattern=index % len(DOT_PATTERNS)
+        )
 
 
 def dot_follow_timeline(duration_seconds: int, speed: str = "normal") -> DotFollowTimeline:

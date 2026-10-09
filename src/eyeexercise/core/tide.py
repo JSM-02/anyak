@@ -3,7 +3,8 @@
 20분 타이머를 물의 높이로 보여 준다. 물은 시간이 갈수록 차오르고, 가득 차면 쉴 시간이다. 수면은 파도가 잔잔하게 일렁인다.
 이 모듈은 수위와 수면 높이, 오늘의 눈 아이콘 줄을 숫자로만 계산하고, 그리는 일은 ui가 한다.
 
-수면은 두 겹이다. 앞쪽 수면은 물과 글자 색이 바뀌는 경계이고, 뒤쪽 물결은 그 위에 옅게 깔리는 장식이다.
+수면은 서로 다른 속도로 흐르는 두 사인파를 더한 한 겹이다. 물과 글자 색이 바뀌는 경계가 된다. (뒤쪽에 옅게 깔던 물결은
+그림자처럼 보여서 뺐다.)
 """
 
 import math
@@ -54,21 +55,12 @@ def wave_offset(x: float, t: float, width: float, style: WaveStyle) -> float:
     return swell + tilt + breath * (big + small)
 
 
-def back_offset(x: float, t: float, width: float, style: WaveStyle) -> float:
-    """뒤쪽 옅은 물결의 높이. 앞쪽 수면보다 조금 위에서 더 느리게 반대 방향으로 흐른다."""
-    swell, tilt, breath = _swell_and_tilt(x, t, width, style)
-    lift = 10 + style.a1 * 0.35
-    return (swell + tilt) * 0.8 - lift + 0.9 * breath * style.a1 * math.sin(x * _TAU / (style.l1 * 1.3) - t * 0.35 + 1.2)
-
-
 def wave_margin(style: WaveStyle) -> float:
     """수위 0%와 100%에서 물이 화면 안으로 삐져나오거나 빈틈이 생기지 않게 위아래로 더 잡아 둘 여백(px).
 
-    앞쪽과 뒤쪽 파도가 움직일 수 있는 최대 높이보다 크다."""
+    수면이 움직일 수 있는 최대 높이보다 크다."""
     top = 1 + style.breath
-    front = abs(style.swell) + abs(style.tilt) + top * (style.a1 + style.a2)
-    back = 0.8 * (abs(style.swell) + abs(style.tilt)) + 10 + style.a1 * 0.35 + 0.9 * top * style.a1
-    return max(front, back) + 2
+    return abs(style.swell) + abs(style.tilt) + top * (style.a1 + style.a2) + 2
 
 
 def water_level(state: State, remaining: float | None, target: float | None) -> float:

@@ -273,7 +273,7 @@ def test_수위_0이어도_물결이_바닥에_얇게_보인다(qapp):
     home = sized(page())
     home.set_timer(State.RUNNING, 1200, 1200, None)
     assert home.water_target == 0.0
-    front, _back, _line = home.water_paths()
+    front, _line = home.water_paths()
     h = home.height()
     assert 0.8 * h < front.boundingRect().top() < h  # 바닥의 얇은 띠
     assert pixel(home, 5, h - 3).name() == theme.color("hero").name()
@@ -303,7 +303,7 @@ def test_시계_글자_크기는_오늘_요약_값이_바뀌어도_그대로다(
 def test_수위_100이면_물이_화면을_빈틈없이_덮는다(qapp):
     home = sized(page())
     home.set_timer(State.DUE, None, 1200, None)
-    front, _back, _line = home.water_paths()
+    front, _line = home.water_paths()
     assert front.boundingRect().top() <= 0
     for x in (0, 5, home.width() // 2, home.width() - 5):
         assert front.contains(QPointF(x, 1))
@@ -317,13 +317,6 @@ def test_물은_수위만큼_아래에서부터_차오른다(qapp):
     # 왼쪽 가장자리(글자가 없는 곳)에서, 수면에서 충분히 떨어진 위와 아래를 본다
     assert pixel(home, 5, h // 2 - 90).name() == theme.color("paper").name()
     assert pixel(home, 5, h // 2 + 90).name() == theme.color("hero").name()
-
-
-def test_뒤쪽_물결은_앞쪽_물과_다른_모양으로_깔린다(qapp):
-    home = sized(page())
-    home.set_timer(State.RUNNING, 600, 1200, None)
-    front, back, _line = home.water_paths()
-    assert back != front and back.boundingRect().height() > 0
 
 
 def test_글자는_물_밖에서는_짙은색_물_안에서는_모래색으로_두_번_그린다(qapp, monkeypatch):

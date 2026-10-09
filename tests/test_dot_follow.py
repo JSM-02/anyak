@@ -9,7 +9,6 @@ from eyeexercise.core.exercises import (
     EXERCISE_BLINK,
     EXERCISE_DOT_FOLLOW,
     FINISH_SECONDS,
-    LOOK_AWAY_SECONDS,
     MESSAGES,
     MIN_DOT_SECONDS,
     PREPARE_SECONDS,
@@ -117,7 +116,7 @@ def test_기본_60초는_패턴_6개가_한_번씩():
     assert [t.pattern_at(i).key for i in range(6)] == [p.key for p in DOT_PATTERNS]
 
 
-def test_준비_추적_마무리_먼_곳_보기_순서():
+def test_준비_추적_마무리_순서이고_끝나면_바로_끝난다():
     t = dot_follow_timeline(60)
     assert t.step_at(0).phase is Phase.PREPARE
     assert t.step_at(0).dot == DOT_CENTER
@@ -126,7 +125,8 @@ def test_준비_추적_마무리_먼_곳_보기_순서():
     assert t.step_at(56.9).phase is Phase.TRACK
     assert t.step_at(57.0).phase is Phase.FINISH
     assert t.step_at(59.9).phase is Phase.FINISH
-    assert t.step_at(60.0).phase is Phase.LOOK_AWAY
+    assert t.step_at(60.0).phase is Phase.FINISH and t.step_at(60.0).done  # 먼 곳 바라보기로 이어지지 않는다
+    assert not any(t.step_at(i / 4).phase is Phase.LOOK_AWAY for i in range(0, 400))
 
 
 def test_준비_문구는_고개를_가만히_두라고_알려_준다():
@@ -215,26 +215,20 @@ def test_패턴_하나의_길이는_약_9초():
         assert 8.0 <= t._segment_seconds <= 10.0  # noqa: SLF001
 
 
-def test_운동이_끝나는_시점과_카운트다운은_깜빡임_운동과_같다():
+def test_점_따라가기는_마무리가_끝나는_시점에_완료되고_바로_끝난다():
     t = dot_follow_timeline(60)
-    assert not t.step_at(59.99).finished
-    first = t.step_at(60)
-    assert first.finished and not first.done
-    assert first.phase is Phase.LOOK_AWAY and first.countdown == 20
-    assert first.dot is None and first.eye_openness is None  # 먼 곳을 보는 동안에는 점이 없다
-    assert t.step_at(70.0).countdown == 10
-    assert not t.step_at(79.99).done
-    end = t.step_at(60 + LOOK_AWAY_SECONDS)
-    assert end.done and end.countdown == 0
-    assert t.step_at(999).done
+    assert not t.step_at(59.99).finished and not t.step_at(59.99).done
+    end = t.step_at(60)
+    assert end.finished and end.done  # 먼 곳 바라보기 없이 바로 끝난다
+    assert end.phase is Phase.FINISH and end.countdown is None and end.dot == DOT_CENTER
+    assert t.step_at(999).done and t.step_at(999).countdown is None
 
 
-def test_진행률은_운동_동안_차오르고_먼_곳_보기_동안_줄어든다():
+def test_진행률은_운동_동안_차오르고_끝난_뒤에도_가득이다():
     t = dot_follow_timeline(60)
     rising = [t.step_at(i / 10).progress for i in range(0, 600)]
     assert rising[0] == 0.0 and rising == sorted(rising)
-    falling = [t.step_at(60 + i / 10).progress for i in range(0, 200)]
-    assert falling[0] == 1.0 and falling == sorted(falling, reverse=True)
+    assert t.step_at(60).progress == 1.0 and t.step_at(70).progress == 1.0
 
 
 def test_점_따라가기에는_눈_모양이_없고_깜빡임에는_점이_없다():
@@ -349,3 +343,18 @@ def test_프리셋_길이는_짧게_보통_길게_순으로_길어진다():
     blink = [blink_seconds_for_cycles(p.blink_cycles) for p in LENGTH_PRESETS]
     dot = [p.dot_seconds for p in LENGTH_PRESETS]
     assert blink == sorted(blink) and dot == sorted(dot) and len(set(blink)) == 3 and len(set(dot)) == 3
+
+
+def test_점을_따라가는_동안에만_지금_경로_번호를_알려_준다():
+    timeline = dot_follow_timeline(60)  # 패턴 6개, 9초씩
+    assert timeline.step_at(1).pattern is None  # 준비
+    for index in range(6):
+        assert timeline.step_at(PREPARE_SECONDS + index * 9 + 4).pattern == index
+    assert timeline.step_at(58).pattern is None  # 마무리
+    assert timeline.step_at(60 + 5).pattern is None  # 먼 곳 바라보기
+    assert [timeline.step_at(PREPARE_SECONDS + i * 9 + 4).message for i in range(6)] == [p.message for p in DOT_PATTERNS]
+
+
+def test_패턴이_6개보다_많이_필요하면_번호가_처음부터_다시_돈다():
+    timeline = dot_follow_timeline(3 + 8 * 9 + 3)  # 패턴 8개
+    assert [timeline.step_at(PREPARE_SECONDS + i * 9 + 4).pattern for i in range(8)] == [0, 1, 2, 3, 4, 5, 0, 1]

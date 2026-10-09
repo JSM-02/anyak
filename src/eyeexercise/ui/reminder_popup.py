@@ -301,8 +301,8 @@ class ReminderPopup(QWidget):
             surface += (height + margin - SURFACE_Y) * self._count_progress
         return 1 - (surface + margin) / (height + 2 * margin)
 
-    def water_paths(self) -> tuple[QPainterPath, QPainterPath, QPainterPath]:
-        """(앞쪽 물, 뒤쪽 옅은 물결, 수면의 선)."""
+    def water_paths(self) -> tuple[QPainterPath, QPainterPath]:
+        """(물, 수면의 선)."""
         return water_paths(self.width(), self.height(), self.water_level(), self._wave_t, WAVE_WEAK)
 
     def _font(self, px: float, weight: QFont.Weight) -> QFont:
@@ -334,11 +334,8 @@ class ReminderPopup(QWidget):
         outline.addRoundedRect(QRectF(self.rect()), _RADIUS, _RADIUS)
         painter.setClipPath(outline)  # 둥근 모서리 밖은 그리지 않아 투명하게 남는다. 테두리 선도 그림자도 쓰지 않는다
         painter.fillRect(self.rect(), theme.color("paper"))
-        front, back, line = self.water_paths()
+        front, line = self.water_paths()
         water = theme.color("hero")
-        soft = QColor(water)
-        soft.setAlpha(66)
-        painter.fillPath(back, soft)
         if self._counting:
             self._paint_count_content(painter, theme.color("text"))  # 물 밖의 글자. 아래의 물이 이 글자를 덮는다
         painter.fillPath(front, water)

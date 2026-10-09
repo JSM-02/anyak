@@ -311,8 +311,8 @@ class HomePage(QWidget):
 
     # ---- 수면 ----
 
-    def water_paths(self) -> tuple[QPainterPath, QPainterPath, QPainterPath]:
-        """(앞쪽 물, 뒤쪽 옅은 물결, 앞쪽 수면의 선). 수위가 0%여도 바닥에 얇게 깔린다."""
+    def water_paths(self) -> tuple[QPainterPath, QPainterPath]:
+        """(물, 수면의 선). 수위가 0%여도 바닥에 얇게 깔린다."""
         return water_paths(self.width(), self.height(), display_level(self._level), self._wave_t, self._wave)
 
     # ---- 그리기 ----
@@ -469,11 +469,8 @@ class HomePage(QWidget):
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         painter.setRenderHint(QPainter.RenderHint.TextAntialiasing)
         painter.fillRect(self.rect(), theme.color("paper"))
-        front, back, line = self.water_paths()
+        front, line = self.water_paths()
         water = theme.color("hero")
-        soft = QColor(water)
-        soft.setAlpha(66)
-        painter.fillPath(back, soft)  # 뒤쪽 옅은 물결은 글자 아래에 깔아서 짙은 글자가 흐려지지 않게 한다
         self._paint_content(painter, theme.color("text"))  # 물 밖의 글자. 아래의 물이 이 글자를 덮는다
         painter.fillPath(front, water)
         painter.save()

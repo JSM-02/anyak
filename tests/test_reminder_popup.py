@@ -34,7 +34,7 @@ def shown(qapp, **kwargs):
 
 def test_팝업은_거의_가득_찬_물이고_위쪽_얇은_띠에만_수면이_보인다(qapp):
     p = shown(qapp)
-    front, _back, _line = p.water_paths()
+    front, _line = p.water_paths()
     assert front.boundingRect().top() > -1 and front.boundingRect().top() < SURFACE_Y  # 수면이 위쪽 띠 안에 있고 맨 위까지 덮지는 않는다
     assert _line.boundingRect().bottom() < _TOP_MARGIN  # 수면의 가장 낮은 곳도 글자 시작 위치(위 여백)보다 위라 글자가 수면에 걸치지 않는다
     assert front.contains(QPointF(p.width() / 2, p.height() / 2))
@@ -122,10 +122,10 @@ def test_보인_뒤에는_물결_모양이_바뀐다(qapp):
     now = {"t": 0.0}
     moving = popup(animations=True, clock=lambda: now["t"])
     moving.resize(380, 250)
-    first = moving.water_paths()[2].boundingRect().top()
+    first = moving.water_paths()[1].boundingRect().top()
     now["t"] = 4.0
     moving._on_frame()
-    assert moving.water_paths()[2].boundingRect().top() != first
+    assert moving.water_paths()[1].boundingRect().top() != first
     moving.deleteLater()
 
 
@@ -145,7 +145,7 @@ def test_팝업_높이가_달라져도_위쪽_띠의_두께는_같다(qapp):
     tops = []
     for height in (150, 200, 260):
         p.resize(340, height)
-        tops.append(round(p.water_paths()[2].boundingRect().top(), 1))
+        tops.append(round(p.water_paths()[1].boundingRect().top(), 1))
     assert max(tops) - min(tops) < 0.5
     p.deleteLater()
 
@@ -202,14 +202,14 @@ def test_카운트다운을_시작하면_팝업_안에서_20초를_센다(qapp):
 
 def test_시간이_흐르면_숫자가_줄고_물이_빠진다(qapp):
     p, _ = counting(qapp)
-    top0 = p.water_paths()[2].boundingRect().top()
+    top0 = p.water_paths()[1].boundingRect().top()
     p._elapsed.ms = 5200
     p._on_frame()
     assert p.countdown_text == "15"
-    top1 = p.water_paths()[2].boundingRect().top()
+    top1 = p.water_paths()[1].boundingRect().top()
     p._elapsed.ms = 15000
     p._on_frame()
-    top2 = p.water_paths()[2].boundingRect().top()
+    top2 = p.water_paths()[1].boundingRect().top()
     assert top0 < top1 < top2  # 수면이 점점 내려간다
     p.hide()
 

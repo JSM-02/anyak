@@ -5,7 +5,6 @@ from eyeexercise.core.tide import (
     WAVE_MID,
     WAVE_STRONG,
     WAVE_WEAK,
-    back_offset,
     display_level,
     eye_row,
     wave_margin,
@@ -64,7 +63,6 @@ def test_수면_높이는_여백_안에서만_움직인다():
         margin = wave_margin(style)
         for x, t in samples():
             assert abs(wave_offset(x, t, 900, style)) <= margin
-            assert abs(back_offset(x, t, 900, style)) <= margin
 
 
 def test_파도는_세기가_셀수록_더_크게_일렁인다():
@@ -85,18 +83,10 @@ def test_같은_시각과_위치에서는_항상_같은_값이다():
     assert wave_offset(120, 4.2, 900, WAVE_MID) == wave_offset(120, 4.2, 900, WAVE_MID)
 
 
-def test_뒤쪽_물결은_앞쪽_수면보다_위에_있다():
-    # 화면 좌표에서 y가 작을수록 위. 평균으로 비교한다
-    front = [wave_offset(x, t, 900, WAVE_MID) for x, t in samples()]
-    back = [back_offset(x, t, 900, WAVE_MID) for x, t in samples()]
-    assert sum(back) / len(back) < sum(front) / len(front) - 5
-
-
 def test_값은_유한하다():
     for x, t in samples():
         for style in STYLES:
             assert math.isfinite(wave_offset(x, t, 900, style))
-            assert math.isfinite(back_offset(x, t, 900, style))
 
 
 # ---- 눈 아이콘 줄 ----

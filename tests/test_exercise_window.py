@@ -62,7 +62,7 @@ def test_시간이_흐르면_안내와_진행률이_바뀐다(qapp):
     assert window._message.text() == "천천히 눈을 감으세요"
     window._elapsed.ms = 15000
     window._on_frame()
-    assert window._progress.value() == 500
+    assert window.progress == pytest.approx(0.5)
     window.close()
 
 
@@ -135,10 +135,10 @@ def test_카운트다운_중에는_진행_막대가_줄어든다(qapp):
     window.start(blink_timeline(30))
     window._elapsed.ms = 30000
     window._on_frame()
-    assert window._progress.value() == 1000
+    assert window.progress == pytest.approx(1.0)
     window._elapsed.ms = 40000
     window._on_frame()
-    assert window._progress.value() == 500
+    assert window.progress == pytest.approx(0.5)
     window.close()
 
 
@@ -369,26 +369,27 @@ def test_점_따라가기를_끝까지_하면_완료를_점_따라가기_이름�
     assert not window.running and window._button.text() == "닫기"
 
 
-def test_먼_곳_바라보기_동안에는_점이_사라지고_카운트다운이_보인다(qapp):
-    window, _ = dot_window(qapp)
-    window._elapsed.ms = 60000
-    window._on_frame()
-    assert window._dots.dot_position() is None
-    assert window._message.text() == "먼 곳을 바라보세요 · 20"
-    window._elapsed.ms = 70500
-    window._on_frame()
-    assert window._message.text() == "먼 곳을 바라보세요 · 10"
-    window.close()
-
-
-def test_카운트다운이_끝나면_저절로_닫힌다(qapp):
+def test_점_따라가기가_끝나면_먼_곳_바라보기_없이_완료를_알리고_닫힌다(qapp):
     window, events = dot_window(qapp)
+    window._elapsed.ms = 59000  # 마무리(점이 가운데로 돌아오는 중)
+    window._on_frame()
+    assert window.isVisible() and events == []
     window._elapsed.ms = 60000
     window._on_frame()
-    window._elapsed.ms = 80000
-    window._on_frame()
-    assert not window.isVisible()
     assert events == [("completed", "dot_follow", 60)]
+    assert not window.isVisible()  # 카운트다운 없이 바로 닫힌다
+    assert "먼 곳" not in window._message.text()
+
+
+def test_점_따라가기_창은_끝까지_같은_큰_창이고_눈_모양이_나타나지_않는다(qapp):
+    window, _ = dot_window(qapp)
+    size = (window.width(), window.height())
+    for ms in (500, 20000, 58000, 59900):
+        window._elapsed.ms = ms
+        window._on_frame()
+        assert (window.width(), window.height()) == size
+        assert window._dots.isVisible() and not window._eye.isVisible()
+    window.close()
 
 
 def test_점_따라가기_도중_Esc로_중단하면_완료_없이_중단만_알린다(qapp):
@@ -400,14 +401,14 @@ def test_점_따라가기_도중_Esc로_중단하면_완료_없이_중단만_알
     assert not window.isVisible()
 
 
-def test_점_따라가기의_소리는_준비_마무리_먼_곳_보기에서만_난다(qapp):
+def test_점_따라가기의_소리는_준비와_마무리에서만_난다(qapp):
     speaker = FakeSpeaker()
     window, _ = dot_window(qapp, speaker)
     for ms in (500, 3000, 20000, 40000, 57000, 60000):
         window._elapsed.ms = ms
         window._on_frame()
-    # 추적 중에는 단계가 TRACK 하나라서 한 번만 알리고, TRACK에는 소리가 정의돼 있지 않다
-    assert speaker.phases == [Phase.PREPARE, Phase.TRACK, Phase.FINISH, Phase.LOOK_AWAY]
+    # 추적 중에는 단계가 TRACK 하나라서 한 번만 알리고, TRACK에는 소리가 정의돼 있지 않다. 먼 곳 바라보기는 하지 않는다
+    assert speaker.phases == [Phase.PREPARE, Phase.TRACK, Phase.FINISH]
     window.close()
 
 
@@ -438,50 +439,7 @@ def test_점_따라가기_창은_깜빡임_창보다_크다():
     assert w_dot > w_blink and h_dot > h_blink
 
 
-# ---- 먼 곳 바라보기: 점 따라가기도 깜빡임과 같은 화면 ----
-
-
-def test_점_따라가기도_먼_곳_바라보기에서는_깜빡임과_같은_작은_창과_눈_모양이다(qapp):
-    window, _ = dot_window(qapp)
-    window._elapsed.ms = 59000  # 마무리(점이 가운데로 돌아오는 중)
-    window._on_frame()
-    assert window._dots.isVisible() and (window.width(), window.height()) == (1344, 915)
-    before = window.geometry().center()
-
-    window._elapsed.ms = 60000  # 먼 곳 바라보기 시작
-    window._on_frame()
-    assert (window.width(), window.height()) == (480, 320)  # 깜빡임 창과 같은 크기
-    assert window._eye.isVisible() and not window._dots.isVisible()  # 점이 있던 회색 화면이 사라진다
-    assert window._message.text() == "먼 곳을 바라보세요 · 20"
-    after = window.geometry().center()
-    assert abs(before.x() - after.x()) <= 1 and abs(before.y() - after.y()) <= 1  # 같은 자리에서 줄어든다
-    window.close()
-
-
-def test_먼_곳_바라보기_화면으로_바뀐_뒤에는_다시_바뀌지_않는다(qapp):
-    window, _ = dot_window(qapp)
-    window._elapsed.ms = 60000
-    window._on_frame()
-    geometry = window.geometry()
-    for ms in (61000, 65000, 70000, 79000):
-        window._elapsed.ms = ms
-        window._on_frame()
-        assert window.geometry() == geometry
-        assert window._eye.isVisible() and not window._dots.isVisible()
-    window.close()
-
-
-def test_먼_곳_바라보기_뒤_다시_시작하면_큰_창으로_돌아온다(qapp):
-    from eyeexercise.core.exercises import dot_follow_timeline
-
-    window, _ = dot_window(qapp)
-    window._elapsed.ms = 60000
-    window._on_frame()
-    window.close()
-    window.start(dot_follow_timeline(60))
-    assert (window.width(), window.height()) == (1344, 915)
-    assert window._dots.isVisible() and not window._eye.isVisible()
-    window.close()
+# ---- 깜빡임: 먼 곳 바라보기에서도 같은 창 ----
 
 
 def test_깜빡임은_먼_곳_바라보기에서도_창이_그대로다(qapp):
