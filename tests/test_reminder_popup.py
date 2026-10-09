@@ -57,9 +57,12 @@ def test_다크_모드에서도_물_색이다(qapp):
     p.hide()
 
 
-def test_팝업_모서리는_둥글게_투명하다(qapp):
+def test_모서리는_둥글고_테두리_선도_그림자도_없다(qapp):
     p = shown(qapp)
-    assert p.grab().toImage().pixelColor(0, 0).alpha() == 0
+    image = p.grab().toImage()
+    assert image.pixelColor(0, 0).alpha() == 0  # 둥근 모서리 바깥은 투명하다
+    assert image.pixelColor(p.width() // 2, p.height() - 1).name() == theme.color("hero").name()  # 가장자리에 다른 색의 테두리 선이 없다
+    assert image.pixelColor(p.width() // 2, p.height() - 1).alpha() == 255
     p.hide()
 
 
@@ -145,3 +148,208 @@ def test_팝업_높이가_달라져도_위쪽_띠의_두께는_같다(qapp):
         tops.append(round(p.water_paths()[2].boundingRect().top(), 1))
     assert max(tops) - min(tops) < 0.5
     p.deleteLater()
+
+
+# ---- 팝업 안의 20초 카운트다운 (먼 곳 바라보기) ----
+
+
+class FakeElapsed:
+    def __init__(self) -> None:
+        self.ms = 0
+
+    def start(self) -> None:
+        self.ms = 0
+
+    def elapsed(self) -> int:
+        return self.ms
+
+
+class FakeSpeaker:
+    def __init__(self) -> None:
+        self.phases = []
+        self.stopped = 0
+
+    def cue(self, phase) -> None:
+        self.phases.append(phase)
+
+    def stop(self) -> None:
+        self.stopped += 1
+
+
+def counting(qapp, animations=False, speaker=None):
+    from eyeexercise.core.exercises import LookAwayTimeline
+
+    p = popup(animations=animations)
+    p._elapsed = FakeElapsed()
+    if speaker is not None:
+        p.set_speaker(speaker)
+    events = []
+    p.completed.connect(lambda name, sec: events.append(("completed", name, sec)))
+    p.aborted.connect(lambda: events.append(("aborted",)))
+    p.start_countdown(LookAwayTimeline())
+    qapp.processEvents()
+    return p, events
+
+
+def test_카운트다운을_시작하면_팝업_안에서_20초를_센다(qapp):
+    p, _ = counting(qapp)
+    assert p.isVisible() and p.counting
+    assert p.countdown_text == "20"
+    assert p._abort_button.isVisible()
+    assert all(not b.isVisible() for b in (p._snooze_button, p._exercise_button))  # 알림 단추는 숨는다
+    p.hide()
+
+
+def test_시간이_흐르면_숫자가_줄고_물이_빠진다(qapp):
+    p, _ = counting(qapp)
+    top0 = p.water_paths()[2].boundingRect().top()
+    p._elapsed.ms = 5200
+    p._on_frame()
+    assert p.countdown_text == "15"
+    top1 = p.water_paths()[2].boundingRect().top()
+    p._elapsed.ms = 15000
+    p._on_frame()
+    top2 = p.water_paths()[2].boundingRect().top()
+    assert top0 < top1 < top2  # 수면이 점점 내려간다
+    p.hide()
+
+
+def test_20초가_지나면_휴식을_한_번만_완료로_알리고_닫힌다(qapp):
+    p, events = counting(qapp)
+    p._elapsed.ms = 20000
+    p._on_frame()
+    p._on_frame()
+    assert events == [("completed", "blink", 20)]  # 휴식은 '깜빡임' 이름으로 센다(기록 구조 그대로)
+    assert not p.counting and not p.isVisible()
+
+
+def test_20초가_되기_전에는_완료로_알리지_않는다(qapp):
+    p, events = counting(qapp)
+    p._elapsed.ms = 19900
+    p._on_frame()
+    assert events == [] and p.counting
+    p.hide()
+
+
+def test_중단_버튼은_완료_없이_중단만_알린다(qapp):
+    p, events = counting(qapp)
+    p._elapsed.ms = 8000
+    p._abort_button.click()
+    assert events == [("aborted",)] and not p.counting and not p.isVisible()
+
+
+def test_카운트다운_중에_팝업이_숨겨지면_중단으로_알린다(qapp):
+    p, events = counting(qapp)
+    p.hide()
+    assert events == [("aborted",)] and not p.counting
+
+
+def test_완료_뒤_숨겨져도_중단으로_알리지_않는다(qapp):
+    p, events = counting(qapp)
+    p._elapsed.ms = 20000
+    p._on_frame()
+    p.hide()
+    assert events == [("completed", "blink", 20)]
+
+
+def test_시작과_끝에서_소리_안내를_낸다(qapp):
+    from eyeexercise.core.exercises import Phase
+
+    speaker = FakeSpeaker()
+    p, _ = counting(qapp, speaker=speaker)
+    assert speaker.phases == [Phase.LOOK_AWAY]  # 시작할 때 '먼 곳을 바라보세요'
+    p._elapsed.ms = 20000
+    p._on_frame()
+    assert speaker.phases == [Phase.LOOK_AWAY, Phase.FINISH]  # 끝나면 눈을 돌려도 되도록 알려 준다
+
+
+def test_중단하면_소리를_멈춘다(qapp):
+    speaker = FakeSpeaker()
+    p, _ = counting(qapp, speaker=speaker)
+    p._abort_button.click()
+    assert speaker.stopped >= 1
+
+
+def test_카운트다운_중에는_애니메이션을_꺼도_숫자와_물이_갱신된다(qapp):
+    p, _ = counting(qapp, animations=False)
+    assert p._frame.isActive()
+    p._elapsed.ms = 10000
+    p._on_frame()
+    assert p.countdown_text == "10" and p._wave_t == 0.0
+    p.hide()
+    assert not p._frame.isActive()
+
+
+def test_카운트다운이_끝난_뒤_알림이_다시_뜨면_알림_모양으로_돌아온다(qapp):
+    p, _ = counting(qapp)
+    p._abort_button.click()
+    p.show_at_corner()
+    assert not p.counting and p._snooze_button.isVisible() and not p._abort_button.isVisible()
+    p.hide()
+
+
+def test_알림에서_바로_카운트다운으로_바뀌어도_팝업은_숨지_않는다(qapp):
+    from PySide6.QtCore import QEvent, QObject
+
+    from eyeexercise.core.exercises import LookAwayTimeline
+
+    class Watcher(QObject):
+        def __init__(self):
+            super().__init__()
+            self.hidden = 0
+
+        def eventFilter(self, obj, event):
+            if event.type() == QEvent.Type.Hide:
+                self.hidden += 1
+            return False
+
+    p = popup()
+    p._elapsed = FakeElapsed()
+    watcher = Watcher()
+    p.installEventFilter(watcher)
+    p.show_at_corner()
+    p.start_countdown(LookAwayTimeline())
+    qapp.processEvents()
+    assert watcher.hidden == 0 and p.isVisible() and p.counting  # 깜빡이지 않는다
+    p.hide()
+
+
+def test_운동_제안이_있던_팝업도_카운트다운에서_아래쪽_자리를_지킨다(qapp):
+    from eyeexercise.core.exercises import LookAwayTimeline
+
+    p = popup()
+    p._elapsed = FakeElapsed()
+    p.set_exercise_offer(0, 2)
+    p.show_at_corner()
+    bottom = p.geometry().bottom()
+    p.start_countdown(LookAwayTimeline())
+    qapp.processEvents()
+    assert abs(p.geometry().bottom() - bottom) <= 1  # 줄어들어도 화면 구석의 아래 위치는 그대로
+    p.hide()
+
+
+def test_카운트다운_글자는_물_밖에서는_짙은색_물_안에서는_모래색으로_두_번_그린다(qapp, monkeypatch):
+    calls = []
+    original = ReminderPopup._paint_count_content
+
+    def spy(self, painter, color):
+        calls.append((color.name(), painter.hasClipping()))
+        original(self, painter, color)
+
+    monkeypatch.setattr(ReminderPopup, "_paint_count_content", spy)
+    p, _ = counting(qapp)
+    p._elapsed.ms = 9000
+    p._on_frame()
+    calls.clear()  # 앞서 화면에 뜰 때 그려진 것은 뺀다
+    p.grab()
+    assert calls == [(theme.color("text").name(), True), (theme.color("sand").name(), True)]  # 둥근 모서리로 이미 잘라 둔 상태
+    p.hide()
+
+
+def test_카운트다운_바탕은_물이_빠질수록_드러난다(qapp):
+    p, _ = counting(qapp)
+    assert pixel(p, 8, p.height() // 2).name() == theme.color("hero").name()  # 시작: 물 속
+    p._elapsed.ms = 17000
+    p._on_frame()
+    assert pixel(p, 8, p.height() // 2).name() == theme.color("paper").name()  # 거의 끝: 물이 빠졌다
+    p.hide()

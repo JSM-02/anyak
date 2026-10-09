@@ -9,7 +9,7 @@ from PySide6.QtWidgets import QApplication, QSystemTrayIcon
 
 from eyeexercise import APP_NAME
 from eyeexercise.core.clock import SystemClock
-from eyeexercise.core.exercises import exercise_timeline, rest_timeline
+from eyeexercise.core.exercises import LookAwayTimeline, exercise_timeline, rest_timeline
 from eyeexercise.core.history import ACTIVITY_EXERCISE, History
 from eyeexercise.core.autostart import AutoStart
 from eyeexercise.core.offer import exercises_done_today, should_offer_exercise
@@ -60,9 +60,12 @@ class TrayApp:
         )
         self.controller = Controller(scheduler, self.history, usage_tracker=usage_tracker)
         app.aboutToQuit.connect(self.controller.flush_usage)  # 로그오프·종료 때도 마지막 구간을 저장한다
+        self._speaker = create_speaker(settings.sound.enabled)  # 팝업 안의 20초와 운동 창이 같은 소리 안내를 쓴다
+        self._rest_from_popup = False  # 팝업의 [시작]으로 휴식을 시작하는 중이다(팝업이 닫히지 않고 카운트다운으로 바뀐다)
         self.popup = ReminderPopup(settings.snooze_minutes)
         self.popup.set_alert(create_alert(settings.sound.enabled))
-        self.exercise_window = ExerciseWindow(create_speaker(settings.sound.enabled))
+        self.popup.set_speaker(self._speaker)
+        self.exercise_window = ExerciseWindow(self._speaker)
         settings_file = paths.settings_path()
         self.settings_manager = SettingsManager(settings, save=lambda s: json_store.save_settings(settings_file, s))
         self.settings_manager.subscribe(self._on_settings_changed)
@@ -91,7 +94,9 @@ class TrayApp:
         self.exercise_window.completed.connect(self.controller.complete_exercise)
         self.exercise_window.aborted.connect(self.controller.abort_exercise)
 
-        self.popup.start_clicked.connect(self.controller.start_rest)
+        self.popup.start_clicked.connect(self._on_popup_start)
+        self.popup.completed.connect(self.controller.complete_exercise)  # 팝업 안의 20초를 마쳤다
+        self.popup.aborted.connect(self.controller.abort_exercise)
         self.popup.exercise_clicked.connect(self.controller.start_exercise)
         self.popup.snooze_clicked.connect(self.controller.snooze)
         self.popup.skip_clicked.connect(self.controller.skip)
@@ -126,11 +131,21 @@ class TrayApp:
         if new.appearance != old.appearance:
             theme.set_mode(new.appearance)
         if new.sound.enabled != old.sound.enabled:
-            self.exercise_window.set_speaker(create_speaker(new.sound.enabled))
+            self._speaker = create_speaker(new.sound.enabled)
+            self.exercise_window.set_speaker(self._speaker)
+            self.popup.set_speaker(self._speaker)
             self.popup.set_alert(create_alert(new.sound.enabled))
+
+    def _on_popup_start(self) -> None:
+        self._rest_from_popup = True
+        self.controller.start_rest()
+        self._rest_from_popup = False
 
     def _on_state_changed(self, state: State) -> None:
         # 버튼이든 트레이 메뉴든, 알림 상태를 벗어나면 팝업을 닫는다.
+        # 다만 팝업의 [시작]으로 시작한 휴식이 팝업 안의 20초 카운트다운이면 팝업을 닫지 않고 그 자리에서 바꾼다(깜빡이지 않게).
+        if state is State.EXERCISING and self._rest_from_popup and isinstance(rest_timeline(self._settings.exercises), LookAwayTimeline):
+            return
         if state is not State.DUE:
             self.popup.hide()
 
@@ -150,6 +165,9 @@ class TrayApp:
         if timeline is None:
             self.tray.show_message("점 따라가기가 꺼져 있어요. 설정에서 켜 주세요.")
             self.controller.abort_exercise()
+            return
+        if isinstance(timeline, LookAwayTimeline):
+            self.popup.start_countdown(timeline)  # 깜빡임이 꺼져 있으면 창 없이 팝업 안에서 20초 먼 곳 바라보기
             return
         self.exercise_window.start(timeline)
 

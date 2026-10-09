@@ -9,7 +9,7 @@ def test_기본값():
     assert s.snooze_minutes == 5
     assert s.idle_pause_minutes == 1
     assert s.idle_reset_minutes == 5
-    assert s.exercises.blink.enabled is True
+    assert s.exercises.blink.enabled is False  # 기본은 팝업에서 20초 먼 곳 바라보기만. 깜빡임은 설정에서 켠다
     assert s.exercises.blink.duration_seconds == 36  # 깜빡임 5회
     assert s.exercises.dot_follow.duration_seconds == 60
     assert s.exercises.daily_goal == 2

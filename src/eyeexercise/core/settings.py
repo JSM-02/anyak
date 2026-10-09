@@ -19,7 +19,7 @@ DAILY_GOAL_RANGE = (0, 5)  # 하루 눈 운동 목표 횟수. 0이면 운동을 
 
 @dataclass(frozen=True)
 class BlinkSettings:
-    enabled: bool = True
+    enabled: bool = False  # 기본은 꺼짐: 휴식은 팝업에서 20초 먼 곳 바라보기만 한다. 켜면 그 앞에 깜빡임 운동이 붙는다
     duration_seconds: int = 36  # 준비 3 + 사이클 5회(6초씩) + 마무리 3. 눈 '휴식'의 깜빡임 부분이다
 
 

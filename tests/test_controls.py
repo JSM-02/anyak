@@ -303,7 +303,9 @@ def test_잘린_손잡이는_이_검사에_걸린다(qapp):
 
 
 def test_설정_화면의_슬라이더_손잡이도_잘리지_않는다(qapp):
-    page = SettingsPage(SettingsManager(Settings()))
+    manager = SettingsManager(Settings())
+    manager.update({"exercises.blink.enabled": True})  # 깜빡임이 꺼지면 그 슬라이더는 옅게 보인다
+    page = SettingsPage(manager)
     page.resize(900, 1100)
     page.show()
     qapp.processEvents()

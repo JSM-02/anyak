@@ -32,6 +32,11 @@ def make_page(qapp, settings=None, save=None):
     return page, manager, saved
 
 
+def blink_on():
+    """깜빡임을 켠 설정. 깜빡임은 기본 꺼짐이라 깜빡임 입력칸을 시험할 때 쓴다."""
+    return SettingsManager(Settings()).update({"exercises.blink.enabled": True}).settings
+
+
 def label_text(page, name):
     return [lbl for lbl in page.findChildren(QLabel) if lbl.objectName() == name][0]
 
@@ -61,7 +66,7 @@ def test_입력칸은_현재_설정_값으로_채워진다(qapp):
     assert page.control("snooze_minutes").value() == 5
     assert page.control("idle_pause_minutes").value() == 1
     assert page.control("idle_reset_minutes").value() == 5
-    assert page.control("exercises.blink.enabled").isChecked()
+    assert not page.control("exercises.blink.enabled").isChecked()  # 깜빡임은 기본 꺼짐
     assert page.control("exercises.blink.duration_seconds").value() == 5  # 36초 = 깜빡임 5회
     assert page.control("exercises.daily_goal").value() == 2
     assert page.control("exercises.dot_follow.enabled").isChecked()
@@ -275,7 +280,7 @@ def _wheel(widget):
 
 
 def test_포커스가_없으면_마우스_휠로_값이_바뀌지_않는다(qapp):
-    page, manager, saved = make_page(qapp)
+    page, manager, saved = make_page(qapp, blink_on())
     for path in ("interval_minutes", "exercises.blink.duration_seconds", "idle_reset_minutes"):
         slider = page.control(path).slider
         slider.clearFocus()
@@ -325,7 +330,7 @@ def test_점_따라가기_설명은_걸리는_시간만_짧게_보여_준다(qap
 
 
 def test_운동을_끄면_그_운동의_시간과_속도_입력칸이_꺼진다(qapp):
-    page, _, _ = make_page(qapp)
+    page, _, _ = make_page(qapp, blink_on())
     page.control("exercises.dot_follow.enabled").setChecked(False)
     assert not page.control("exercises.dot_follow.duration_seconds").isEnabled()
     assert not page.control("exercises.dot_follow.speed").isEnabled()
@@ -467,7 +472,7 @@ def test_경고와_저장_실패_안내는_색이_있는_글자로_보인다(qap
 
 
 def test_꺼진_운동의_슬라이더_값은_옅게_보인다(qapp):
-    page, _, _ = make_page(qapp)
+    page, _, _ = make_page(qapp, blink_on())
     page._advanced_toggle.click()  # 고급 설정을 펼친다
     qapp.processEvents()
     value = page.control("exercises.blink.duration_seconds").value_label

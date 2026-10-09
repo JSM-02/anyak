@@ -116,22 +116,97 @@ def test_알림이_뜨면_목표를_채우지_못했을_때만_운동을_제안�
     tray_app.popup.hide()
 
 
-def test_휴식을_시작하면_깜빡임과_먼_곳_바라보기_창이_뜬다(qapp, tmp_path, monkeypatch):
+def blink_on(tray_app):
+    tray_app.settings_manager.update({"exercises.blink.enabled": True})
+
+
+def test_깜빡임을_켜면_휴식은_깜빡임과_먼_곳_바라보기_창이_뜬다(qapp, tmp_path, monkeypatch):
     tray_app, _ = make_app(qapp, tmp_path, monkeypatch)
+    blink_on(tray_app)
+    tray_app.controller.reminder_due.emit()
     tray_app.popup.start_clicked.emit()
     window = tray_app.exercise_window
     assert window.isVisible() and window._tag.text() == "눈 휴식"
-    assert window._timeline.exercise == "blink" and window._timeline.total_seconds == 36  # 기본 5회
+    assert window._timeline.exercise == "blink" and window._timeline.total_seconds == 36  # 5회
+    assert not tray_app.popup.isVisible() and not tray_app.popup.counting  # 팝업은 닫힌다
     window.close()
 
 
-def test_깜빡임을_끄면_휴식은_먼_곳_바라보기만_한다(qapp, tmp_path, monkeypatch):
+def test_깜빡임이_꺼져_있으면_휴식은_창_없이_팝업_안의_20초_카운트다운이다(qapp, tmp_path, monkeypatch):
+    tray_app, _ = make_app(qapp, tmp_path, monkeypatch)  # 깜빡임은 기본 꺼짐
+    tray_app.popup._elapsed = FakeElapsed()
+    tray_app.controller.reminder_due.emit()
+    tray_app.popup.start_clicked.emit()
+    assert tray_app.popup.isVisible() and tray_app.popup.counting
+    assert not tray_app.exercise_window.isVisible()  # 따로 뜨는 창이 없다
+    assert tray_app.controller.state is State.EXERCISING and tray_app.controller.activity == ACTIVITY_REST
+    tray_app.popup._elapsed.ms = 19000
+    tray_app.popup._on_frame()
+    assert list(tray_app.history.events) == []  # 20초가 지나기 전에는 기록하지 않는다
+    tray_app.popup._elapsed.ms = 20000
+    tray_app.popup._on_frame()
+    assert [(e.type, e.exercise, e.duration_seconds) for e in tray_app.history.events] == [("completed", "blink", 20)]
+    assert tray_app.controller.state is State.RUNNING and tray_app.controller.activity is None
+    assert not tray_app.popup.isVisible()
+
+
+def test_알림에서_시작해도_팝업이_깜빡이지_않고_바로_카운트다운이_된다(qapp, tmp_path, monkeypatch):
+    from PySide6.QtCore import QEvent, QObject
+
+    class Watcher(QObject):
+        hidden = 0
+
+        def eventFilter(self, obj, event):
+            if event.type() == QEvent.Type.Hide:
+                self.hidden += 1
+            return False
+
     tray_app, _ = make_app(qapp, tmp_path, monkeypatch)
-    tray_app.settings_manager.update({"exercises.blink.enabled": False})
+    tray_app.popup._elapsed = FakeElapsed()
+    tray_app.controller.reminder_due.emit()
+    watcher = Watcher()
+    tray_app.popup.installEventFilter(watcher)
+    tray_app.popup.start_clicked.emit()
+    assert watcher.hidden == 0 and tray_app.popup.isVisible() and tray_app.popup.counting
+    tray_app.popup.hide()
+
+
+def test_홈이나_트레이의_지금_휴식도_팝업에서_카운트다운을_한다(qapp, tmp_path, monkeypatch):
+    tray_app, _ = make_app(qapp, tmp_path, monkeypatch)
+    tray_app.popup._elapsed = FakeElapsed()
+    assert not tray_app.popup.isVisible()
     tray_app.controller.start_rest()
-    assert isinstance(tray_app.exercise_window._timeline, LookAwayTimeline)
-    assert tray_app.exercise_window._tag.text() == "눈 휴식"
+    assert tray_app.popup.isVisible() and tray_app.popup.counting and not tray_app.exercise_window.isVisible()
+    tray_app.popup.hide()
+
+
+def test_카운트다운을_중단하면_기록_없이_타이머만_다시_센다(qapp, tmp_path, monkeypatch):
+    tray_app, _ = make_app(qapp, tmp_path, monkeypatch)
+    tray_app.popup._elapsed = FakeElapsed()
+    tray_app.controller.reminder_due.emit()
+    tray_app.popup.start_clicked.emit()
+    tray_app.popup._elapsed.ms = 8000
+    tray_app.popup._abort_button.click()
+    assert list(tray_app.history.events) == []
+    assert tray_app.controller.state is State.RUNNING and tray_app.controller.activity is None
+    assert not tray_app.popup.isVisible()
+
+
+def test_운동_제안으로_시작하면_팝업은_닫히고_점_따라가기_창이_뜬다(qapp, tmp_path, monkeypatch):
+    tray_app, _ = make_app(qapp, tmp_path, monkeypatch)
+    tray_app.controller.reminder_due.emit()
+    tray_app.popup.exercise_clicked.emit()
+    assert not tray_app.popup.isVisible() and not tray_app.popup.counting  # 팝업 안의 카운트다운으로 바뀌지 않는다
+    assert tray_app.exercise_window.isVisible() and tray_app.exercise_window._timeline.exercise == "dot_follow"
     tray_app.exercise_window.close()
+
+
+def test_팝업과_운동_창이_같은_소리_안내를_쓴다(qapp, tmp_path, monkeypatch):
+    tray_app, speakers = make_app(qapp, tmp_path, monkeypatch, sound=True)
+    assert tray_app.popup._speaker is tray_app.exercise_window._speaker is not None
+    tray_app.settings_manager.update({"sound.enabled": False})
+    assert tray_app.popup._speaker is None and tray_app.exercise_window._speaker is None
+    assert speakers == [False]  # 소리 안내는 설정을 바꿀 때 한 번만 새로 만든다
 
 
 def test_운동을_시작하면_점_따라가기_창이_뜬다(qapp, tmp_path, monkeypatch):
@@ -171,7 +246,7 @@ def test_트레이_메뉴에_지금_휴식과_지금_운동이_있다(qapp, tmp_
     tray._act_rest.trigger()
     assert tray_app.controller.activity == ACTIVITY_REST
     assert not tray._act_rest.isEnabled() and not tray._act_now.isEnabled()  # 하는 중에는 둘 다 못 누른다
-    tray_app.exercise_window.close()
+    tray_app.popup.hide()
 
 
 def test_트레이_안내_문구는_휴식_기준이다(qapp, tmp_path, monkeypatch):
@@ -181,7 +256,7 @@ def test_트레이_안내_문구는_휴식_기준이다(qapp, tmp_path, monkeypa
     assert tray._status_text(State.DUE) == "눈 쉬는 시간이에요"
     tray_app.controller.start_rest()
     assert tray._status_text(State.EXERCISING) == "눈 쉬는 중"
-    tray_app.exercise_window.close()
+    tray_app.popup.hide()  # 팝업 안의 20초를 멈춘다(깜빡임이 꺼져 있어 휴식은 팝업 안에서 한다)
     tray_app.controller.start_exercise()
     assert tray._status_text(State.EXERCISING) == "눈 운동 중"
     tray_app.exercise_window.close()

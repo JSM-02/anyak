@@ -14,13 +14,13 @@ PC를 쓰는 동안 일정 간격으로 눈 운동을 알려 주는 Windows 트�
 |---|---|---|
 | <img src="docs/images/records.png" alt="기록 화면" width="300"> | <img src="docs/images/settings.png" alt="설정 화면" width="300"> | <img src="docs/images/vision.png" alt="시력 기록 화면" width="300"> |
 
-| 알림 팝업 | 눈 깜빡임 | 점 따라가기 |
+| 알림 팝업 | 팝업 안의 20초 | 점 따라가기 |
 |---|---|---|
-| <img src="docs/images/popup.png" alt="알림 팝업" width="300"> | <img src="docs/images/blink.png" alt="눈 깜빡임 운동 창" width="300"> | <img src="docs/images/exercise.png" alt="점 따라가기 운동 창" width="300"> |
+| <img src="docs/images/popup.png" alt="알림 팝업" width="300"> | <img src="docs/images/popup_count.png" alt="팝업 안의 20초 먼 곳 바라보기" width="300"> | <img src="docs/images/exercise.png" alt="점 따라가기 운동 창" width="300"> |
 
 ## 기능
 - **주기 알림:** 기본 20분마다 눈 휴식을 알려 줍니다. 간격은 설정에서 바꿀 수 있습니다.
-- **눈 휴식:** 눈 깜빡임 운동과 먼 곳 바라보기를 안내합니다. 눈을 감고도 들을 수 있게 음성이나 알림음으로 알려 줍니다.
+- **눈 휴식:** 알림 팝업의 [시작]을 누르면 같은 팝업이 20초 카운트다운으로 바뀌어 먼 곳을 바라보게 합니다(창이 따로 뜨지 않습니다). 20초가 지나야 휴식으로 기록합니다. 설정에서 **눈 깜빡임 운동**을 켜면 먼 곳 바라보기 앞에 깜빡임 운동이 붙고, 눈을 감고도 들을 수 있게 음성이나 알림음으로 안내합니다.
 - **눈 운동:** 화면의 점을 눈으로 따라가는 운동 가이드입니다.
 - **미루기 / 건너뛰기:** 지금 쉬기 어려우면 알림을 미루거나 건너뜁니다.
 - **기록:** 일별 휴식·운동 기록과 달성률, 스크린 타임(시간대별 PC 사용 시간), 시력 기록을 보여 줍니다.

@@ -227,7 +227,9 @@ def test_모든_단계에_음성_정의가_있다():
 def test_휴식은_깜빡임_뒤에_먼_곳_바라보기가_이어진다():
     from eyeexercise.core.exercises import rest_timeline
 
-    t = rest_timeline(Settings().exercises)
+    from eyeexercise.core.settings import with_changes
+
+    t = rest_timeline(with_changes(Settings(), {"exercises.blink.enabled": True}).exercises)  # 깜빡임은 기본 꺼짐
     assert (t.total_seconds, t.cycles) == (36, 5)
     assert t.step_at(10).phase is not Phase.LOOK_AWAY
     assert t.step_at(36 + 0.5).phase is Phase.LOOK_AWAY and t.step_at(36.5).finished

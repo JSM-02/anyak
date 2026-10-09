@@ -1,3 +1,4 @@
+from PySide6.QtCore import QPoint
 from PySide6.QtGui import QColor
 from test_exercise_window import make_window
 
@@ -79,8 +80,8 @@ def test_알림_팝업은_짙은_초록_물이고_시작_버튼이_모래색이�
     qapp.processEvents()
     assert pixel(popup, 6, popup.height() // 2).name() == theme.color("hero").name()
     start = popup.findChild(type(popup._snooze_button), "primary")
-    box = start.geometry()
-    assert pixel(popup, box.left() + 8, box.center().y()).name() == theme.color("sand").name()  # 글자를 피해 버튼 왼쪽 안쪽
+    inside = start.mapTo(popup, QPoint(8, start.height() // 2))  # 글자를 피해 버튼 왼쪽 안쪽(버튼 좌표를 팝업 좌표로)
+    assert pixel(popup, inside.x(), inside.y()).name() == theme.color("sand").name()
     popup.hide()
 
 
