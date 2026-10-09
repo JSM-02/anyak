@@ -90,7 +90,7 @@ _STYLE = """
 #nav QPushButton { background: transparent; border: none; font-size: $fs_icon; color: $accent; padding: 0 10px; }
 #nav QPushButton:disabled { color: $disabled; }
 #navTitle { font-size: $fs_body; font-weight: bold; min-width: 80px; }
-#card { background: $surface; border: 1px solid $border; border-radius: 18px; }
+#card { background: $panel; border: none; border-radius: 18px; }
 #kicker { font-size: $fs_small; color: $text_secondary; font-weight: 800; }
 #caption { font-size: $fs_small; color: $text_secondary; }
 #cardLabel { font-size: $fs_caption; color: $text_secondary; font-weight: 700; }

@@ -15,7 +15,7 @@ def test_창_제목과_사이드바_이름이_앱_이름을_쓴다(qapp):
 
     window = MainWindow(History())
     assert window.windowTitle() == eyeexercise.APP_NAME
-    assert any(label.text() == eyeexercise.APP_NAME for label in window.sidebar.findChildren(QLabel))
+    assert any(label.text() == eyeexercise.APP_NAME for label in window.topbar.findChildren(QLabel))
 
 
 def test_트레이_툴팁에_앱_이름이_나온다(qapp):

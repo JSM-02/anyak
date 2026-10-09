@@ -44,7 +44,7 @@ _STYLE = """
 #visionPage QLabel { background: transparent; }
 #pageTitle { font-size: $fs_title; font-weight: 900; }
 #sectionTitle { font-size: $fs_heading; font-weight: 800; padding-top: 6px; }
-#card { background: $surface; border: 1px solid $border; border-radius: 18px; }
+#card { background: $panel; border: none; border-radius: 18px; }
 #fieldLabel { font-size: $fs_small; color: $text_secondary; }
 #hint { font-size: $fs_caption; color: $text_secondary; }
 #formError { font-size: $fs_small; color: $danger; }

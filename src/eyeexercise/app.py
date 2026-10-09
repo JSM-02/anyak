@@ -83,7 +83,7 @@ class TrayApp:
             vision_log=self.vision_log,
             autostart=autostart,
         )
-        self.main_window.attach_controller(self.controller)  # 사이드바의 눈 휴식 타이머
+        self.main_window.attach_controller(self.controller)  # 위쪽 메뉴 줄의 눈 휴식 타이머
         self.tray = TrayIcon(self.controller, app_icon())
 
         self.controller.reminder_due.connect(self._on_reminder_due)

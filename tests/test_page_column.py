@@ -32,7 +32,7 @@ def test_메인_창을_크게_키워도_카드_화면의_본문_너비가_그대
     window.show()
     qapp.processEvents()
     for index, page in enumerate((window.records_tab, window.vision_page, window.settings_page), start=1):
-        window.sidebar.set_current(index)
+        window.topbar.set_current(index)
         qapp.processEvents()
         scroll_content = page.findChildren(QWidget, "pageColumn")[0]
         inner = scroll_content.layout().itemAt(1).widget()

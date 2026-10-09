@@ -529,7 +529,7 @@ def test_설정에서_운동_목표를_바꾸면_홈이_따라간다(qapp):
 
 def test_홈이_첫_화면이다(qapp):
     window = MainWindow()
-    assert window.sidebar.label(0) == "홈" and window._stack.currentWidget() is window.home_page
+    assert window.topbar.label(0) == "홈" and window._stack.currentWidget() is window.home_page
 
 
 # ---- 지금 운동·일시정지 ----

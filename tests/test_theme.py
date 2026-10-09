@@ -86,8 +86,8 @@ def test_다크에서_화면이_실제로_어둡게_칠해진다(qapp):
     window = MainWindow(History(), settings_manager=SettingsManager(Settings()))
     theme.set_dark(True)
     window.resize(1000, 700)
-    for row in range(window.sidebar.count()):
-        window.sidebar.set_current(row)
+    for row in range(window.topbar.count()):
+        window.topbar.set_current(row)
         image = window.grab().toImage()
         # 본문 한가운데와 왼쪽 메뉴 아래쪽 바탕이 어두워야 한다
         assert QColor(image.pixel(900, 20)).lightness() < 100, row
@@ -167,9 +167,7 @@ def test_채운_바탕_위_글자는_두_테마_모두_읽힌다():
         assert contrast("#ffffff", p.hero) >= 4.5  # 짙은 초록 블록 위 흰 글자 (팝업·홈 타이머·오늘 눈 휴식 카드)
         assert contrast(p.sand, p.hero) >= 4.5  # 블록 위 모래색 글자
         assert contrast(p.sidebar_text, p.hero) >= 4.5  # 블록 위 연한 초록 보조 글자
-        assert contrast(p.on_accent, p.accent) >= 4.5  # 사이드바 선택 메뉴·저장 버튼 (포인트 초록 위 글자)
-        assert contrast("#ffffff", p.sidebar) >= 7 and contrast(p.sidebar_text, p.sidebar) >= 4.5
-        assert contrast("#ffffff", p.sidebar_pill) >= 4.5  # 사이드바 타이머 알약
+        assert contrast(p.on_accent, p.accent) >= 4.5  # 저장 버튼 (포인트 초록 위 글자)
 
 
 def test_다크_모드의_고정색_글자는_테마_글자색이_아니라_ink다():
@@ -186,6 +184,6 @@ def test_다크_모드의_고정색_글자는_테마_글자색이_아니라_ink�
 
 
 def test_다크_팔레트는_초록_기운이_있는_어두운_색이다():
-    for name in ("bg", "surface", "sidebar", "chip", "border"):
+    for name in ("bg", "surface", "chip", "border"):
         c = QColor(getattr(theme.DARK, name))
         assert c.green() >= c.red() and c.lightness() < 70, name  # 회색이 아니라 초록 쪽으로 치우친 어두운 색

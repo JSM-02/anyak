@@ -354,17 +354,17 @@ def test_하루_흐름이_실제로_그려진다(qapp):
     color = image.pixelColor(int(used.left()) + 3, int(used.bottom()) - 3)
     assert color.green() > color.red() + 20  # 스크린 타임이 있는 칸은 초록 계열
     empty = chart.cell_rect(0, 7)
-    assert image.pixelColor(int(empty.left()) + 3, int(empty.bottom()) - 3).name() == "#dfebe6"  # 쓰지 않은 시간은 빈 칸
+    assert image.pixelColor(int(empty.left()) + 3, int(empty.bottom()) - 3).name() == "#eceae1"  # 쓰지 않은 시간은 빈 칸
 
     done_lane = chart.lane_rect(0, 14)  # 눈 운동 1회: 칸 아래 운동 줄에 호박색 막대가 켜진다
     assert image.pixelColor(int(done_lane.center().x()), int(done_lane.center().y())).name() == theme.color("gauge_mid").name()
 
     rest_cell = chart.cell_rect(0, 16)  # 눈 휴식은 칸에도 운동 줄에도 표시하지 않는다 (20분마다라 너무 많아진다)
     flat = {image.pixelColor(x, y).name() for x in range(int(rest_cell.left()) + 2, int(rest_cell.right()) - 2) for y in range(int(rest_cell.top()) + 2, int(rest_cell.bottom()) - 2)}
-    assert flat == {"#dfebe6"}
+    assert flat == {"#eceae1"}
     skipped_cell = chart.cell_rect(0, 11)  # 건너뜀·미룸도 칸 귀퉁이에 점을 그리지 않는다 (줄 오른쪽 요약과 마우스 설명으로만)
     corner = image.pixelColor(int(skipped_cell.right() - 4), int(skipped_cell.top() + 4))
-    assert corner.name() == "#dfebe6"
+    assert corner.name() == "#eceae1"
 
 
 def test_기간과_상관없이_하루_흐름은_그대로다(qapp):
@@ -415,7 +415,7 @@ def test_선택한_막대는_새로_그려도_유지된다(qapp):
 
 def test_메인_창에_기록_탭이_있다(qapp):
     window = MainWindow()
-    assert window.sidebar.label(1) == "기록"
+    assert window.topbar.label(1) == "기록"
     assert window._stack.widget(1) is window.records_tab
 
 
@@ -472,17 +472,17 @@ def test_무시된_요청과_중단은_기록이_바뀌었다고_알리지_않�
 
 def test_왼쪽_메뉴에_홈_기록_시력_기록_설정이_있다(qapp):
     window = MainWindow()
-    assert [window.sidebar.label(i) for i in range(window.sidebar.count())] == ["홈", "기록", "시력 기록", "설정"]
-    assert window.sidebar.current() == 0 and window._stack.currentWidget() is window.home_page
+    assert [window.topbar.label(i) for i in range(window.topbar.count())] == ["홈", "기록", "시력 기록", "설정"]
+    assert window.topbar.current() == 0 and window._stack.currentWidget() is window.home_page
 
 
 def test_메뉴를_고르면_본문이_바뀐다(qapp):
     window = MainWindow()
-    window.sidebar.set_current(1)
+    window.topbar.set_current(1)
     assert window._stack.currentIndex() == 1 and window._stack.currentWidget() is window.records_tab
-    window.sidebar.set_current(3)
+    window.topbar.set_current(3)
     assert window._stack.currentIndex() == 3
-    window.sidebar.set_current(0)
+    window.topbar.set_current(0)
     assert window._stack.currentWidget() is window.home_page
 
 

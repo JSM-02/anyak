@@ -9,7 +9,7 @@ from PySide6.QtWidgets import QHBoxLayout, QWidget
 
 from eyeexercise.ui import theme
 
-MAX_CONTENT_WIDTH = 980  # 기본 창(1000px)에서 사이드바를 뺀 본문(약 790px)보다 조금 넓은 정도까지만 늘어난다
+MAX_CONTENT_WIDTH = 980  # 기본 창(1000px)의 본문보다 조금 넓은 정도까지만 늘어난다
 _WRAPPER_STYLE = "#pageColumn { background: $bg; }"
 
 

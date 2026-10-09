@@ -19,8 +19,6 @@ class Palette:
     # 바탕
     bg: str  # 페이지 바탕
     surface: str  # 카드·팝업·입력칸 바탕
-    sidebar: str
-    sidebar_border: str
     hover: str  # 버튼에 마우스를 올렸을 때, 분할 버튼의 바탕
     chip: str  # 연한 버튼·표시 바탕
     # 선
@@ -48,30 +46,28 @@ class Palette:
     knob: str  # 스위치·슬라이더 손잡이
     danger: str
     warning: str
-    # 디자인 토대(9a): 히어로 카드·포인트 모래색·달성률 게이지의 세 색·사이드바
+    # 디자인 토대(9a): 히어로 카드·포인트 모래색·달성률 게이지의 세 색
     hero: str
     sand: str
     gauge_good: str
     gauge_mid: str
     gauge_low: str
     sidebar_text: str
-    sidebar_pill: str
     ink: str  # 모래색·밝은 초록처럼 채운 바탕 위에 쓰는 글자색. 라이트·다크 모두 같은 짙은 초록이다
+    panel: str  # 기록·설정 카드 바탕. 테두리 없이 종이색 바탕과 살짝 구분되는 면
     paper: str  # 홈 화면 바탕. 물(hero)과 글자가 가장 또렷하게 보이도록 초록 기운이 거의 없는 흰색(다크는 앱 바탕)
 
 
 LIGHT = Palette(
-    bg="#EAF1EE",
+    bg="#F8F8F5",
     surface="#ffffff",
-    sidebar="#092328",
-    sidebar_border="#092328",
-    hover="#D5E4DE",
-    chip="#DFEBE6",
-    border="#DDE8E4",
+    hover="#E4E2D9",
+    chip="#ECEAE1",
+    border="#E4E2D9",
     border_strong="#B7CBC4",
     input_border="#8AA39C",
-    divider="#E3ECE8",
-    grid="#DDE8E4",
+    divider="#DEDBD0",
+    grid="#E4E2D9",
     text="#092328",
     text_body="#2F4A46",
     text_secondary="#4F6B66",
@@ -83,9 +79,9 @@ LIGHT = Palette(
     accent_soft="#D6EBDD",
     accent_disabled="#A9CFBD",
     disabled="#B7CBC4",
-    track="#DDE8E4",
+    track="#D9D6CA",
     switch_off="#8AA39C",
-    switch_off_disabled="#DDE8E4",
+    switch_off_disabled="#D9D6CA",
     knob="#ffffff",
     danger="#c5221f",
     warning="#9a5400",
@@ -95,16 +91,14 @@ LIGHT = Palette(
     gauge_mid="#D9A03A",
     gauge_low="#D9622B",
     sidebar_text="#9FC8A6",
-    sidebar_pill="#12544F",
     ink="#092328",
+    panel="#EFEEE7",
     paper="#F8F8F5",
 )
 
 DARK = Palette(
     bg="#0c1a1d",
     surface="#13262a",
-    sidebar="#071316",
-    sidebar_border="#071316",
     hover="#1d3338",
     chip="#1a2f33",
     border="#223a3f",
@@ -135,8 +129,8 @@ DARK = Palette(
     gauge_mid="#e3b04b",
     gauge_low="#f0805a",
     sidebar_text="#9fc8a6",
-    sidebar_pill="#15423c",
     ink="#092328",
+    panel="#13262a",
     paper="#0c1a1d",
 )
 

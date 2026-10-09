@@ -1,14 +1,14 @@
 """메인 창(기록·설정·시력 기록 대시보드). 닫으면 종료하지 않고 트레이로 숨긴다.
 
-Windows 데스크톱 앱처럼 왼쪽에 메뉴, 오른쪽에 넓은 본문을 둔다.
+위쪽에 메뉴 줄(로고·메뉴·눈 휴식 타이머), 그 아래에 넓은 본문을 둔다.
 """
 
 from collections.abc import Callable
 from datetime import datetime
 
 from PySide6.QtCore import QRect, Signal
-from PySide6.QtGui import QCloseEvent, QGuiApplication
-from PySide6.QtWidgets import QHBoxLayout, QMainWindow, QStackedWidget, QWidget
+from PySide6.QtGui import QCloseEvent, QGuiApplication, QShowEvent
+from PySide6.QtWidgets import QMainWindow, QVBoxLayout, QWidget
 
 from eyeexercise import APP_NAME
 from eyeexercise.core.autostart import AutoStart
@@ -20,11 +20,14 @@ from eyeexercise.core.settings import Settings
 from eyeexercise.core.settings_manager import SettingsManager
 from eyeexercise.core.usage import UsageLog
 from eyeexercise.core.vision import VisionLog
+from eyeexercise.platform.win_caption import set_caption_colors
+from eyeexercise.ui import theme
 from eyeexercise.ui.controller import Controller
 from eyeexercise.ui.home_page import HomePage
 from eyeexercise.ui.records_tab import RecordsTab
 from eyeexercise.ui.settings_page import SettingsPage
-from eyeexercise.ui.sidebar import Sidebar
+from eyeexercise.ui.slide_stack import SlideStack
+from eyeexercise.ui.topbar import TopBar
 from eyeexercise.ui.vision_page import VisionPage
 
 WINDOW_SIZE = (1000, 700)
@@ -32,7 +35,6 @@ WINDOW_MIN_SIZE = (880, 560)
 _SCREEN_MARGIN = 40  # 작업 표시줄과 창 테두리를 빼고 화면에 남기는 여유
 
 _MENU = ("홈", "기록", "시력 기록", "설정")  # 같은 순서로 본문 화면을 쌓는다
-_MENU_ICONS = ("home", "chart", "eye", "gear")
 
 
 def fit_to_screen(area: QRect) -> tuple[tuple[int, int], tuple[int, int]]:
@@ -54,9 +56,11 @@ class MainWindow(QMainWindow):
         settings_manager: SettingsManager | None = None,
         vision_log: VisionLog | None = None,
         autostart: AutoStart | None = None,
+        caption_colors: Callable[[int, str, str], object] = set_caption_colors,
     ) -> None:
         super().__init__()
         self._quitting = False
+        self._caption_colors = caption_colors
         self.setWindowTitle(APP_NAME)
         screen = QGuiApplication.primaryScreen()
         size, minimum = fit_to_screen(screen.availableGeometry()) if screen else (WINDOW_SIZE, WINDOW_MIN_SIZE)
@@ -79,24 +83,39 @@ class MainWindow(QMainWindow):
         )
         self.settings_page = SettingsPage(manager, autostart=autostart)
         self.vision_page = VisionPage(vision_log, today=lambda: now().date())
-        self._stack = QStackedWidget()
+        self._stack = SlideStack()
         for page in (self.home_page, self.records_tab, self.vision_page, self.settings_page):  # _MENU와 같은 순서
             self._stack.addWidget(page)
 
-        self.sidebar = Sidebar(_MENU, _MENU_ICONS)
-        self.sidebar.current_changed.connect(self._stack.setCurrentIndex)
+        self.topbar = TopBar(_MENU)
+        self.topbar.current_changed.connect(self._stack.setCurrentIndex)
+        self.topbar.current_changed.connect(self._update_pill)
+        self._update_pill(0)
         self._controller: Controller | None = None
 
         central = QWidget()
-        layout = QHBoxLayout(central)
+        layout = QVBoxLayout(central)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
-        layout.addWidget(self.sidebar)
+        layout.addWidget(self.topbar)
         layout.addWidget(self._stack, stretch=1)
         self.setCentralWidget(central)
+        theme.on_changed(self._apply_caption)  # 라이트·다크가 바뀌면 제목 막대 색도 따라간다
+
+    def _apply_caption(self) -> None:
+        """Windows가 그리는 제목 막대를 앱 바탕(종이색)과 같은 색으로 맞춘다. 글자는 바탕색으로 감춘다(이름은 메뉴 줄에 있다)."""
+        palette = theme.palette()
+        self._caption_colors(int(self.winId()), palette.paper, palette.paper)
+
+    def showEvent(self, event: QShowEvent) -> None:
+        super().showEvent(event)
+        self._apply_caption()
+
+    def _update_pill(self, index: int) -> None:
+        self.topbar.set_pill_visible(index != 0)  # 홈에는 큰 타이머가 있어 알약이 겹친다
 
     def attach_controller(self, controller: Controller) -> None:
-        """사이드바의 눈 휴식 타이머와 홈 화면이 컨트롤러의 남은 시간·상태를 따라가게 한다."""
+        """메뉴 줄의 눈 휴식 타이머와 홈 화면이 컨트롤러의 남은 시간·상태를 따라가게 한다."""
         self._controller = controller
         controller.ticked.connect(self._refresh_timer)
         controller.state_changed.connect(self._refresh_timer)
@@ -121,7 +140,7 @@ class MainWindow(QMainWindow):
             return
         c = self._controller
         text, tone = timer_pill(c.state, c.remaining_seconds, c.activity)
-        self.sidebar.set_timer(text, tone)
+        self.topbar.set_timer(text, tone)
         self.home_page.set_timer(c.state, c.remaining_seconds, c.target_seconds, c.activity)
 
     def show_and_raise(self) -> None:

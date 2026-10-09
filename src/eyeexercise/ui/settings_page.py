@@ -57,7 +57,7 @@ _STYLE = """
 #pageTitle { font-size: $fs_title; font-weight: 900; }
 #sectionTitle { font-size: $fs_heading; font-weight: 800; padding-top: 6px; }
 #divider { background: $divider; }
-#card { background: $surface; border: 1px solid $border; border-radius: 18px; }
+#card { background: $panel; border: none; border-radius: 18px; }
 #rowTitle { font-size: $fs_body; }
 #rowHint { font-size: $fs_caption; color: $text_secondary; }
 #warning { font-size: $fs_small; color: $warning; }

@@ -42,7 +42,7 @@ def home_timer(state: State, remaining: float | None, activity: str | None = Non
 
 
 def timer_pill(state: State, remaining: float | None, activity: str | None = None) -> tuple[str, str]:
-    """사이드바 타이머 알약의 (문구, 상태). 상태는 normal / alert / paused / active.
+    """메뉴 줄 타이머 알약의 (문구, 상태). 상태는 normal / alert / paused / active.
 
     - 기다리는 중: '12:34 뒤 휴식', 미루는 중: '4:50 뒤 다시 알림'
     - 알림이 떠 있으면: '지금 쉴 시간이에요'
